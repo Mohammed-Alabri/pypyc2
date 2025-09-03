@@ -44,7 +44,7 @@ def get_command(agent_id: int, command_id: int):
 @app.post("/join")
 def create_agent(hostname: str, user: str, request: Request):
     global id_counter
-    ag = Agent(id_counter, request.client.host, user, hostname)
+    ag = Agent(id_counter, request.client.host, hostname, user)
     agents[id_counter] = ag
     id_counter += 1
 
