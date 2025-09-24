@@ -68,7 +68,3 @@ def set_commands(commands: Commands):
     return {'status': True}
 
 
-@app.get("/aaa")
-def get_aaa(request: Request):
-    return {'aaa': request.client.host}
-
