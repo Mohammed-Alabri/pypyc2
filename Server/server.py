@@ -9,6 +9,8 @@ import random
 import os
 import shutil
 from pathlib import Path
+import uvicorn
+
 
 app = FastAPI()
 # id : agent
@@ -323,3 +325,5 @@ async def upload_file_for_agent(agent_id: int, file: UploadFile = File(...)):
     }
 
 
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)
