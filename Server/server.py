@@ -2,6 +2,7 @@ from typing import Union
 from agent import Agent
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from collections import defaultdict
 from models import *
@@ -10,9 +11,20 @@ import os
 import shutil
 from pathlib import Path
 import uvicorn
+from datetime import datetime
 
 
 app = FastAPI()
+
+# CORS middleware for Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Next.js dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # id : agent
 agents = {}
 
@@ -29,13 +41,33 @@ def read_root():
 ################### for server
 @app.get("/agents")
 def get_agents():
-    return agents.keys()
+    """Get list of all agents with their details"""
+    return [agents[agent_id].to_dict() for agent_id in agents]
 
-@app.get("/agent/{id}")
+@app.get("/agent/{agent_id}")
 def get_agent(agent_id: int):
+    """Get detailed info about a specific agent"""
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
-    return agents[agent_id]
+    ag: Agent = agents[agent_id]
+    agent_data = ag.to_dict()
+    # Add command history
+    agent_data['commands'] = [
+        {
+            'command_id': cid,
+            'type': cmd['type'],
+            'data': cmd['data'],
+            'status': cmd['status'],
+            'result': cmd.get('result'),
+            'error': cmd.get('error'),
+            'created_at': cmd['created_at'],
+            'completed_at': cmd.get('completed_at')
+        }
+        for cid, cmd in ag.commands.items()
+    ]
+    agent_data['uploaded_files'] = ag.uploaded_files
+    agent_data['downloaded_files'] = ag.downloaded_files
+    return agent_data
 
 ################### Command Management (Server side)
 @app.post("/create_command/{agent_id}")
@@ -160,8 +192,8 @@ def create_agent(hostname: str, user: str, request: Request):
 def get_commands(agent_id: int):
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
-    ag: Agent
-    ag = agents[agent_id]
+    ag: Agent = agents[agent_id]
+    ag.update_last_seen()  # Update last seen on every poll
     commands = ag.get_commands()
     return {'commands': commands}
 

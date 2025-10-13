@@ -11,6 +11,8 @@ class Agent:
         self.command_counter = 1
         self.uploaded_files = []  # Track uploaded files from this agent
         self.downloaded_files = []  # Track files sent to this agent
+        self.last_seen = datetime.now().isoformat()  # Track last communication
+        self.joined_at = datetime.now().isoformat()  # Track when agent joined
 
     def add_command(self, command_type: str, command_data: Dict[str, Any]) -> int:
         """
@@ -80,6 +82,7 @@ class Agent:
             return {
                 'command_id': command_id,
                 'type': cmd['type'],
+                'data': cmd['data'],
                 'status': cmd['status'],
                 'result': cmd['result'],
                 'error': cmd.get('error'),
@@ -103,3 +106,21 @@ class Agent:
             'filename': filename,
             'downloaded_at': datetime.now().isoformat()
         })
+
+    def update_last_seen(self):
+        """Update the last seen timestamp"""
+        self.last_seen = datetime.now().isoformat()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return agent info as dictionary for API responses"""
+        return {
+            'id': self.id,
+            'ipaddr': self.ipaddr,
+            'hostname': self.hostname,
+            'user': self.user,
+            'last_seen': self.last_seen,
+            'joined_at': self.joined_at,
+            'total_commands': len(self.commands),
+            'uploaded_files_count': len(self.uploaded_files),
+            'downloaded_files_count': len(self.downloaded_files)
+        }
