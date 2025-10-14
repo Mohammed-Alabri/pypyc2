@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { getAgents, getAgentStatus } from '@/lib/api';
 import { Agent } from '@/types/agent';
 import { Users, Activity, Command, HardDrive } from 'lucide-react';
-import Link from 'next/link';
+import { NetworkTopology } from '@/components/NetworkTopology';
 
 export default function Home() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -79,54 +79,20 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Active Agents List */}
-      <div className="bg-gray-900 rounded-lg p-6 border border-gray-800">
-        <h2 className="text-xl font-semibold mb-4">Active Agents</h2>
-        {loading ? (
-          <p className="text-gray-400">Loading agents...</p>
-        ) : agents.length === 0 ? (
-          <p className="text-gray-400">No agents connected. Waiting for agents to join...</p>
-        ) : (
-          <div className="space-y-3">
-            {agents.slice(0, 5).map((agent) => {
-              const status = getAgentStatus(agent.last_seen);
-              return (
-                <Link
-                  key={agent.id}
-                  href={`/agents/${agent.id}`}
-                  className="flex items-center justify-between p-4 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`w-3 h-3 rounded-full ${
-                        status === 'online' ? 'bg-green-500' : 'bg-red-500'
-                      }`}
-                    />
-                    <div>
-                      <p className="font-semibold">{agent.hostname}</p>
-                      <p className="text-sm text-gray-400">
-                        {agent.user} @ {agent.ipaddr}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right text-sm text-gray-400">
-                    <p>ID: {agent.id}</p>
-                    <p>{agent.total_commands} commands</p>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-        {agents.length > 5 && (
-          <Link
-            href="/agents"
-            className="block text-center mt-4 text-blue-400 hover:text-blue-300"
-          >
-            View all {agents.length} agents →
-          </Link>
-        )}
-      </div>
+      {/* Network Topology */}
+      {!loading && (
+        <NetworkTopology
+          agents={agents}
+          onRefresh={async () => {
+            try {
+              const data = await getAgents();
+              setAgents(data);
+            } catch (error) {
+              console.error('Failed to refresh agents:', error);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

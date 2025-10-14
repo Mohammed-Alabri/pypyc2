@@ -107,8 +107,8 @@ export function getAgentStatus(lastSeen: string): 'online' | 'offline' {
   const now = new Date();
   const diffSeconds = (now.getTime() - lastSeenDate.getTime()) / 1000;
 
-  // Consider online if last seen within 10 seconds (agent polls every 3s)
-  return diffSeconds < 10 ? 'online' : 'offline';
+  // Consider online if last seen within 15 seconds (agent polls every 3s, terminal refreshes every 5s)
+  return diffSeconds < 15 ? 'online' : 'offline';
 }
 
 export function formatBytes(bytes: number): string {

@@ -84,6 +84,13 @@ function TerminalContent() {
           const result = await getCommandResult(selectedAgent.id, commandId);
           if (result.status === 'completed' || result.status === 'failed') {
             setCommandHistory((prev) => [...prev, result]);
+
+            // Update last_seen to keep status indicator showing as online
+            setSelectedAgent(prev => prev ? {
+              ...prev,
+              last_seen: new Date().toISOString()
+            } : null);
+
             clearInterval(pollInterval);
             setLoading(false);
             setCommand('');
