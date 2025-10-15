@@ -1,14 +1,12 @@
 import requests as rq
 from sys import argv
-import subprocess
-import sys
 from functions import *
 import time
 import os
 from pathlib import Path
 
 # Configuration constants
-serverip = ""
+serverip = None
 agent_id = None
 REQUEST_TIMEOUT = 30  # seconds for most requests
 UPLOAD_TIMEOUT = 120  # seconds for file uploads
