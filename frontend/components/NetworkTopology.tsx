@@ -296,6 +296,7 @@ export function NetworkTopology({ agents, onRefresh }: NetworkTopologyProps) {
         width={dimensions.width}
         height={dimensions.height}
         className="w-full"
+        overflow="visible"
         style={{
           minHeight: '500px',
           cursor: draggingNode ? 'grabbing' : 'default',
@@ -353,6 +354,8 @@ export function NetworkTopology({ agents, onRefresh }: NetworkTopologyProps) {
               y={agentPos.y}
               onMouseDown={(e) => handleMouseDown(e, 'agent', agent.id)}
               isDragging={draggingNode?.type === 'agent' && draggingNode?.id === agent.id}
+              canvasWidth={dimensions.width}
+              canvasHeight={dimensions.height}
             />
           );
         })}

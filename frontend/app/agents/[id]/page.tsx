@@ -21,6 +21,8 @@ import {
   Download,
   Upload,
   Activity,
+  Copy,
+  Check,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -35,6 +37,7 @@ export default function AgentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [commandFilter, setCommandFilter] = useState<string>('all');
+  const [copiedItem, setCopiedItem] = useState<string | null>(null);
 
   useEffect(() => {
     if (!agentId || isNaN(agentId)) {
@@ -73,6 +76,31 @@ export default function AgentDetailPage() {
     } catch (error) {
       console.error('Failed to download file:', error);
       alert(`Failed to download file: ${error}`);
+    }
+  };
+
+  const handleCopy = async (text: string, itemId: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedItem(itemId);
+      setTimeout(() => setCopiedItem(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      // Fallback for older browsers
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopiedItem(itemId);
+        setTimeout(() => setCopiedItem(null), 2000);
+      } catch (fallbackError) {
+        console.error('Fallback copy also failed:', fallbackError);
+      }
     }
   };
 
@@ -361,7 +389,7 @@ export default function AgentDetailPage() {
                       : cmd.type;
 
                   return (
-                    <details key={cmd.command_id} className="p-4 hover:bg-gray-800/50">
+                    <details key={cmd.command_id} className="p-4 hover:bg-gray-800/50 group">
                       <summary className="cursor-pointer flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           {cmd.status === 'completed' ? (
@@ -371,11 +399,29 @@ export default function AgentDetailPage() {
                           ) : (
                             <Clock className="w-5 h-5 text-yellow-500" />
                           )}
-                          <div>
-                            <p className="font-mono text-sm">{commandDisplay}</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {formatDate(cmd.created_at)}
-                            </p>
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <p className="font-mono text-sm">{commandDisplay}</p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {formatDate(cmd.created_at)}
+                              </p>
+                            </div>
+                            {/* Copy command button - shows on hover */}
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleCopy(commandDisplay, `cmd-${cmd.command_id}`);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-700 rounded"
+                              title="Copy command"
+                            >
+                              {copiedItem === `cmd-${cmd.command_id}` ? (
+                                <Check className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400" />
+                              )}
+                            </button>
                           </div>
                         </div>
                         <span
@@ -392,13 +438,41 @@ export default function AgentDetailPage() {
                       </summary>
                       <div className="mt-3 pl-8">
                         {cmd.result ? (
-                          <pre className="bg-black p-3 rounded text-sm text-gray-300 overflow-x-auto">
-                            {cmd.result}
-                          </pre>
+                          <div className="relative group/output">
+                            {/* Copy output button - top right */}
+                            <button
+                              onClick={() => handleCopy(cmd.result || '', `output-${cmd.command_id}`)}
+                              className="absolute top-2 right-2 opacity-0 group-hover/output:opacity-100 transition-opacity p-1.5 bg-gray-800 hover:bg-gray-700 rounded z-10"
+                              title="Copy output"
+                            >
+                              {copiedItem === `output-${cmd.command_id}` ? (
+                                <Check className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400" />
+                              )}
+                            </button>
+                            <pre className="bg-black p-3 rounded text-sm text-gray-300 overflow-x-auto">
+                              {cmd.result}
+                            </pre>
+                          </div>
                         ) : cmd.error ? (
-                          <pre className="bg-red-900/20 p-3 rounded text-sm text-red-300 overflow-x-auto">
-                            Error: {cmd.error}
-                          </pre>
+                          <div className="relative group/output">
+                            {/* Copy error button */}
+                            <button
+                              onClick={() => handleCopy(cmd.error || '', `error-${cmd.command_id}`)}
+                              className="absolute top-2 right-2 opacity-0 group-hover/output:opacity-100 transition-opacity p-1.5 bg-red-900/30 hover:bg-red-900/50 rounded z-10"
+                              title="Copy error"
+                            >
+                              {copiedItem === `error-${cmd.command_id}` ? (
+                                <Check className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400" />
+                              )}
+                            </button>
+                            <pre className="bg-red-900/20 p-3 rounded text-sm text-red-300 overflow-x-auto">
+                              Error: {cmd.error}
+                            </pre>
+                          </div>
                         ) : (
                           <p className="text-gray-400 text-sm">No output available</p>
                         )}

@@ -21,6 +21,7 @@ function TerminalContent() {
   const [command, setCommand] = useState('');
   const [commandHistory, setCommandHistory] = useState<CommandResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initializedAgentId, setInitializedAgentId] = useState<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,12 +47,30 @@ function TerminalContent() {
 
   useEffect(() => {
     if (selectedAgent) {
-      const completedCommands = selectedAgent.commands.filter(
-        (cmd) => cmd.status === 'completed' || cmd.status === 'failed'
-      );
-      setCommandHistory(completedCommands as CommandResult[]);
+      // If this is a new agent, initialize history
+      if (selectedAgent.id !== initializedAgentId) {
+        const completedCommands = selectedAgent.commands.filter(
+          (cmd) => cmd.status === 'completed' || cmd.status === 'failed'
+        );
+        setCommandHistory(completedCommands as CommandResult[]);
+        setInitializedAgentId(selectedAgent.id);
+      } else {
+        // Same agent - merge new commands from server with local history
+        const serverCommands = selectedAgent.commands.filter(
+          (cmd) => cmd.status === 'completed' || cmd.status === 'failed'
+        );
+
+        setCommandHistory((prevHistory) => {
+          // Build a set of existing command IDs
+          const existingIds = new Set(prevHistory.map(cmd => cmd.command_id));
+          // Find new commands from server that aren't in local history
+          const newCommands = serverCommands.filter(cmd => !existingIds.has(cmd.command_id));
+          // Merge them
+          return [...prevHistory, ...newCommands];
+        });
+      }
     }
-  }, [selectedAgent]);
+  }, [selectedAgent, initializedAgentId]);
 
   useEffect(() => {
     if (terminalRef.current) {
@@ -64,6 +83,7 @@ function TerminalContent() {
       const agentData = await getAgent(agentId);
       setSelectedAgent(agentData);
       setCommandHistory([]);
+      setInitializedAgentId(null); // Reset to trigger fresh initialization
     } catch (error) {
       console.error('Failed to fetch agent:', error);
     }
@@ -78,7 +98,7 @@ function TerminalContent() {
       const response = await executeCommand(selectedAgent.id, command);
       const commandId = response.command_id;
 
-      // Poll for result
+      // Poll for result (300ms for faster response)
       const pollInterval = setInterval(async () => {
         try {
           const result = await getCommandResult(selectedAgent.id, commandId);
@@ -98,7 +118,7 @@ function TerminalContent() {
         } catch (error) {
           console.error('Failed to get command result:', error);
         }
-      }, 1000);
+      }, 300);
 
       // Timeout after 30 seconds
       setTimeout(() => {
