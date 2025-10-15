@@ -103,7 +103,13 @@ function TerminalContent() {
         try {
           const result = await getCommandResult(selectedAgent.id, commandId);
           if (result.status === 'completed' || result.status === 'failed') {
-            setCommandHistory((prev) => [...prev, result]);
+            setCommandHistory((prev) => {
+              // Check if command already exists in history
+              if (prev.some(cmd => cmd.command_id === result.command_id)) {
+                return prev;
+              }
+              return [...prev, result];
+            });
 
             // Update last_seen to keep status indicator showing as online
             setSelectedAgent(prev => prev ? {
@@ -221,7 +227,18 @@ function TerminalContent() {
                   <br />
                   ---
                 </p>
-                {commandHistory.map((cmd, idx) => {
+                {(() => {
+                  // Defensive deduplication: ensure no duplicate command_ids
+                  const seen = new Set<number>();
+                  const deduplicatedHistory = commandHistory.filter(cmd => {
+                    if (seen.has(cmd.command_id)) {
+                      return false;
+                    }
+                    seen.add(cmd.command_id);
+                    return true;
+                  });
+                  return deduplicatedHistory;
+                })().map((cmd) => {
                   // Format command display based on type
                   let commandDisplay = '';
                   if (cmd.type === 'exec' && cmd.data?.command) {
@@ -235,7 +252,7 @@ function TerminalContent() {
                   }
 
                   return (
-                    <div key={idx} className="mb-4">
+                    <div key={cmd.command_id} className="mb-4">
                       <p className="text-blue-400">
                         $ {commandDisplay}
                       </p>
