@@ -8,6 +8,7 @@ import {
   formatDate,
   formatBytes,
   downloadFile,
+  deleteAgent,
 } from '@/lib/api';
 import { AgentDetailed } from '@/types/agent';
 import {
@@ -23,6 +24,7 @@ import {
   Activity,
   Copy,
   Check,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -38,6 +40,8 @@ export default function AgentDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [commandFilter, setCommandFilter] = useState<string>('all');
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!agentId || isNaN(agentId)) {
@@ -49,9 +53,14 @@ export default function AgentDetailPage() {
     const interval = setInterval(fetchAgent, 5000); // Refresh every 5 seconds
 
     return () => clearInterval(interval);
-  }, [agentId]);
+  }, [agentId, isDeleting]);
 
   const fetchAgent = async () => {
+    // Don't fetch if we're in the process of deleting
+    if (isDeleting) {
+      return;
+    }
+
     try {
       const data = await getAgent(agentId);
       setAgent(data);
@@ -101,6 +110,23 @@ export default function AgentDetailPage() {
       } catch (fallbackError) {
         console.error('Fallback copy also failed:', fallbackError);
       }
+    }
+  };
+
+  const handleDeleteAgent = async () => {
+    setIsDeleting(true);
+    try {
+      const result = await deleteAgent(agentId);
+      // Show success message mentioning if agent was terminated
+      const message = result.terminated
+        ? 'Agent terminated and deleted successfully'
+        : 'Agent deleted successfully';
+      console.log(message);
+      router.push('/agents');
+    } catch (error) {
+      console.error('Failed to delete agent:', error);
+      alert(`Failed to delete agent: ${error}`);
+      setIsDeleting(false);
     }
   };
 
@@ -178,6 +204,13 @@ export default function AgentDetailPage() {
             <FolderOpen className="w-4 h-4" />
             Manage Files
           </Link>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="flex items-center gap-2 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Agent
+          </button>
         </div>
       </div>
 
@@ -550,6 +583,73 @@ export default function AgentDetailPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-red-500/20 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-500" />
+              </div>
+              <h2 className="text-xl font-bold">Delete Agent</h2>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-gray-300 mb-4">
+                Are you sure you want to delete agent <span className="font-bold">{agent.hostname}</span> (ID: {agent.id})?
+              </p>
+
+              <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-3 mb-4">
+                <p className="text-yellow-300 text-sm font-semibold mb-2">This action will:</p>
+                <ul className="text-yellow-200 text-sm space-y-1 list-disc list-inside">
+                  {status === 'online' && <li>Send terminate command to gracefully shut down the agent</li>}
+                  <li>Delete all {agent.total_commands} command history records</li>
+                  <li>Remove {agent.uploaded_files_count} uploaded files</li>
+                  <li>Remove {agent.downloaded_files_count} download records</li>
+                  <li>Permanently remove all agent data</li>
+                </ul>
+              </div>
+
+              {status === 'online' && (
+                <div className="bg-green-900/20 border border-green-700 rounded-lg p-3">
+                  <p className="text-green-300 text-sm flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    <span className="font-semibold">Note:</span> Agent is online and will be terminated first
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAgent}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    {status === 'online' ? 'Terminating & Deleting...' : 'Deleting...'}
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    {status === 'online' ? 'Terminate & Delete' : 'Delete Permanently'}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

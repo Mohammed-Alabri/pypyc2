@@ -29,6 +29,18 @@ export async function getAgent(agentId: number): Promise<AgentDetailed> {
   return apiCall<AgentDetailed>(`/agent/${agentId}`);
 }
 
+export async function deleteAgent(agentId: number): Promise<{ status: string; message: string; terminated: boolean }> {
+  return apiCall<{ status: string; message: string; terminated: boolean }>(`/agent/${agentId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function terminateAgent(agentId: number): Promise<{ command_id: number; type: string; status: string; message: string }> {
+  return apiCall<{ command_id: number; type: string; status: string; message: string }>(`/command/${agentId}/terminate`, {
+    method: 'POST',
+  });
+}
+
 // Command management
 export async function executeCommand(agentId: number, command: string) {
   return apiCall(`/command/${agentId}/exec?command=${encodeURIComponent(command)}`, {

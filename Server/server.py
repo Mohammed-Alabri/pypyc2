@@ -69,6 +69,49 @@ def get_agent(agent_id: int):
     agent_data['downloaded_files'] = ag.downloaded_files
     return agent_data
 
+@app.delete("/agent/{agent_id}")
+def delete_agent(agent_id: int):
+    """Delete an agent and all associated files"""
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    ag: Agent = agents[agent_id]
+
+    # Check if agent is online (last seen within 15 seconds)
+    last_seen = datetime.fromisoformat(ag.last_seen)
+    now = datetime.now()
+    diff_seconds = (now - last_seen).total_seconds()
+    is_online = diff_seconds < 15
+
+    # If agent is online, send terminate command first
+    if is_online:
+        try:
+            ag.add_command("terminate", {})
+            # Wait briefly for agent to process terminate command
+            import time
+            time.sleep(3)
+        except Exception as e:
+            print(f"Warning: Failed to send terminate command: {e}")
+            # Continue with deletion anyway
+
+    # Remove agent from dictionary
+    del agents[agent_id]
+
+    # Delete agent's upload directory and all files
+    agent_dir = UPLOAD_DIR / f"agent_{agent_id}"
+    if agent_dir.exists():
+        try:
+            shutil.rmtree(agent_dir)
+        except Exception as e:
+            # Log error but don't fail the deletion
+            print(f"Warning: Failed to delete directory {agent_dir}: {e}")
+
+    return {
+        'status': 'success',
+        'message': f'Agent {agent_id} deleted successfully',
+        'terminated': is_online
+    }
+
 ################### Command Management (Server side)
 @app.post("/create_command/{agent_id}")
 def create_exec_command(agent_id: int, command: str):
@@ -153,6 +196,27 @@ def create_download_command(agent_id: int, filename: str, save_as: str = None):
         'type': 'download',
         'status': 'queued',
         'message': f'Agent will download {filename} and save as {save_as}'
+    }
+
+
+@app.post("/command/{agent_id}/terminate")
+def create_terminate_command(agent_id: int):
+    """
+    Create a terminate command - agent will gracefully shut down
+
+    Args:
+        agent_id: The agent ID
+    """
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    ag: Agent = agents[agent_id]
+    command_id = ag.add_command("terminate", {})
+    return {
+        'command_id': command_id,
+        'type': 'terminate',
+        'status': 'queued',
+        'message': f'Agent {agent_id} will terminate'
     }
 
 

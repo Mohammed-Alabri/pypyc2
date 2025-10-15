@@ -19,11 +19,12 @@ class Agent:
         Add a new command to the queue
 
         Args:
-            command_type: "exec", "upload", or "download"
+            command_type: "exec", "upload", "download", or "terminate"
             command_data: Command-specific data dict
                 - exec: {"command": "whoami"}
                 - upload: {"source_path": "/etc/passwd", "filename": "passwd.txt"}
                 - download: {"url": "/files/tool.exe", "save_as": "tool.exe"}
+                - terminate: {} (no data needed, gracefully shuts down agent)
 
         Returns:
             command_id: The ID of the created command
