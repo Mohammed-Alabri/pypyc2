@@ -35,3 +35,7 @@ frontend/.vercel
 # OS
 .DS_Store
 Thumbs.db
+agent/main.dist
+agent/main.exe
+agent/main.build
+agent/main.onefile-build
