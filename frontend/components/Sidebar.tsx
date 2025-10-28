@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, Terminal, FolderOpen } from 'lucide-react';
+import { Home, Users, Terminal, FolderOpen, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -14,6 +15,15 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { logout, user } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   return (
     <div className="flex flex-col w-64 bg-gray-900 text-white">
@@ -42,7 +52,20 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="px-4 py-4 border-t border-gray-800">
+      <div className="px-4 py-4 border-t border-gray-800 space-y-3">
+        {user && (
+          <div className="mb-3">
+            <p className="text-xs text-gray-500">Logged in as</p>
+            <p className="text-sm text-gray-300 font-medium">{user.username}</p>
+          </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-gray-400 hover:bg-red-900/20 hover:text-red-400"
+        >
+          <LogOut className="w-5 h-5" />
+          <span>Logout</span>
+        </button>
         <p className="text-xs text-gray-500">v1.0.0 | C2 Framework</p>
       </div>
     </div>

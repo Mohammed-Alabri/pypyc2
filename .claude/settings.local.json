@@ -1,22 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node:*)",
-      "Bash(npm --version)",
-      "Bash(npx create-next-app@latest:*)",
-      "Bash(npm install:*)",
-      "Bash(pip install:*)",
-      "Bash(python:*)",
-      "Bash(where python)",
-      "Bash(\"/c/Users/MohdAbri/AppData/Local/Programs/Python/Python314/python.exe\" server.py)",
-      "Bash(curl:*)",
-      "Bash(tree:*)",
-      "Bash(gh pr list:*)"
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []
   },
-  
-  "hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"command":"bash .claude/scripts/validate-bash.sh"}]}]}
-
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "command": "bash .claude/scripts/validate-bash.sh"
+          }
+        ]
+      }
+    ]
+  }
 }

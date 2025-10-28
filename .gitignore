@@ -23,7 +23,6 @@ test_download.py
 frontend/node_modules/
 frontend/.next/
 frontend/out/
-frontend/.env*.local
 frontend/.vercel
 
 # IDEs

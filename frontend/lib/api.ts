@@ -2,15 +2,41 @@ import { Agent, AgentDetailed, CommandResult, FileInfo } from '@/types/agent';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Get auth token from localStorage
+function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('auth_token');
+}
+
 // Helper function for API calls
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = getAuthToken();
+
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...options?.headers,
+  };
+
+  // Add Authorization header if token exists
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
   });
+
+  // Handle 401 Unauthorized - redirect to login
+  if (response.status === 401) {
+    // Clear auth data
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.location.href = '/login';
+    }
+    throw new Error('Unauthorized. Please login again.');
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -90,10 +116,28 @@ export async function uploadFileForAgent(agentId: number, file: File) {
   const formData = new FormData();
   formData.append('file', file);
 
+  const token = getAuthToken();
+  const headers: HeadersInit = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_URL}/upload_for_agent/${agentId}`, {
     method: 'POST',
+    headers,
     body: formData,
   });
+
+  // Handle 401 Unauthorized
+  if (response.status === 401) {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.location.href = '/login';
+    }
+    throw new Error('Unauthorized. Please login again.');
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -104,7 +148,29 @@ export async function uploadFileForAgent(agentId: number, file: File) {
 }
 
 export async function downloadFile(agentDir: string, filename: string): Promise<Blob> {
-  const response = await fetch(`${API_URL}/files/${agentDir}/${filename}`);
+  // Extract agent_id from agentDir (format: "agent_123456")
+  const agentId = agentDir.replace('agent_', '');
+
+  const token = getAuthToken();
+  const headers: HeadersInit = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}/dashboard/files/${agentId}/${filename}`, {
+    headers,
+  });
+
+  // Handle 401 Unauthorized
+  if (response.status === 401) {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.location.href = '/login';
+    }
+    throw new Error('Unauthorized. Please login again.');
+  }
 
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);

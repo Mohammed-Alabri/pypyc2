@@ -1,11 +1,13 @@
-from typing import Union
+from typing import Union, Dict
 from agent import Agent
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from collections import defaultdict
 from models import *
+import auth_routes
+from dependencies import get_current_user
 import random
 import os
 import shutil
@@ -25,6 +27,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include authentication routes
+app.include_router(auth_routes.router)
+
 # id : agent
 agents = {}
 
@@ -33,19 +38,14 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit for file uploads/downloads
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
-
 ################### for server
 @app.get("/agents")
-def get_agents():
+def get_agents(user: Dict = Depends(get_current_user)):
     """Get list of all agents with their details"""
     return [agents[agent_id].to_dict() for agent_id in agents]
 
 @app.get("/agent/{agent_id}")
-def get_agent(agent_id: int):
+def get_agent(agent_id: int, user: Dict = Depends(get_current_user)):
     """Get detailed info about a specific agent"""
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
@@ -70,7 +70,7 @@ def get_agent(agent_id: int):
     return agent_data
 
 @app.delete("/agent/{agent_id}")
-def delete_agent(agent_id: int):
+def delete_agent(agent_id: int, user: Dict = Depends(get_current_user)):
     """Delete an agent and all associated files"""
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
@@ -114,7 +114,7 @@ def delete_agent(agent_id: int):
 
 ################### Command Management (Server side)
 @app.post("/create_command/{agent_id}")
-def create_exec_command(agent_id: int, command: str):
+def create_exec_command(agent_id: int, command: str, user: Dict = Depends(get_current_user)):
     """Legacy endpoint - create an exec command"""
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
@@ -124,7 +124,7 @@ def create_exec_command(agent_id: int, command: str):
 
 
 @app.post("/command/{agent_id}/exec")
-def create_exec_command_v2(agent_id: int, command: str):
+def create_exec_command_v2(agent_id: int, command: str, user: Dict = Depends(get_current_user)):
     """Create an exec command"""
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
@@ -134,7 +134,7 @@ def create_exec_command_v2(agent_id: int, command: str):
 
 
 @app.post("/command/{agent_id}/upload")
-def create_upload_command(agent_id: int, source_path: str, filename: str = None):
+def create_upload_command(agent_id: int, source_path: str, filename: str = None, user: Dict = Depends(get_current_user)):
     """
     Create an upload command - agent will upload a file from source_path
 
@@ -163,7 +163,7 @@ def create_upload_command(agent_id: int, source_path: str, filename: str = None)
 
 
 @app.post("/command/{agent_id}/download")
-def create_download_command(agent_id: int, filename: str, save_as: str = None):
+def create_download_command(agent_id: int, filename: str, save_as: str = None, user: Dict = Depends(get_current_user)):
     """
     Create a download command - agent will download a file from server
 
@@ -200,7 +200,7 @@ def create_download_command(agent_id: int, filename: str, save_as: str = None):
 
 
 @app.post("/command/{agent_id}/terminate")
-def create_terminate_command(agent_id: int):
+def create_terminate_command(agent_id: int, user: Dict = Depends(get_current_user)):
     """
     Create a terminate command - agent will gracefully shut down
 
@@ -221,7 +221,7 @@ def create_terminate_command(agent_id: int):
 
 
 @app.get("/command/{agent_id}/{command_id}")
-def get_command_result(agent_id: int, command_id: int):
+def get_command_result(agent_id: int, command_id: int, user: Dict = Depends(get_current_user)):
     """Get the result of a specific command"""
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
@@ -362,7 +362,7 @@ async def serve_file(agent_dir: str, filename: str):
 
 
 @app.get("/files/{agent_id}")
-def list_agent_files(agent_id: int):
+def list_agent_files(agent_id: int, user: Dict = Depends(get_current_user)):
     """List all files available for an agent"""
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
@@ -383,8 +383,35 @@ def list_agent_files(agent_id: int):
     return {'files': files}
 
 
+@app.get("/dashboard/files/{agent_id}/{filename}")
+def dashboard_download_file(agent_id: int, filename: str, user: Dict = Depends(get_current_user)):
+    """
+    Protected endpoint for dashboard users to download files
+    This endpoint requires authentication and is used by the frontend
+    URL format: /dashboard/files/{agent_id}/{filename}
+    """
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    # Sanitize filename to prevent path traversal
+    safe_filename = Path(filename).name
+
+    # Construct file path
+    agent_dir = UPLOAD_DIR / f"agent_{agent_id}"
+    file_path = agent_dir / safe_filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File {safe_filename} not found")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=safe_filename,
+        media_type='application/octet-stream'
+    )
+
+
 @app.post("/upload_for_agent/{agent_id}")
-async def upload_file_for_agent(agent_id: int, file: UploadFile = File(...)):
+async def upload_file_for_agent(agent_id: int, file: UploadFile = File(...), user: Dict = Depends(get_current_user)):
     """
     Server operator uploads a file that an agent can download later
     Use this to stage files, then create a download command
