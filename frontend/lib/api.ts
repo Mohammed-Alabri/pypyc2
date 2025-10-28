@@ -12,9 +12,9 @@ function getAuthToken(): string | null {
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const token = getAuthToken();
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options?.headers,
+    ...(options?.headers as Record<string, string>),
   };
 
   // Add Authorization header if token exists
@@ -117,7 +117,7 @@ export async function uploadFileForAgent(agentId: number, file: File) {
   formData.append('file', file);
 
   const token = getAuthToken();
-  const headers: HeadersInit = {};
+  const headers: Record<string, string> = {};
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -152,7 +152,7 @@ export async function downloadFile(agentDir: string, filename: string): Promise<
   const agentId = agentDir.replace('agent_', '');
 
   const token = getAuthToken();
-  const headers: HeadersInit = {};
+  const headers: Record<string, string> = {};
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;

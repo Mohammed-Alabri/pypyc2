@@ -91,7 +91,7 @@ export default function FilesPage() {
     if (!path) return;
 
     try {
-      const response = await createUploadCommand(selectedAgent, path);
+      const response = await createUploadCommand(selectedAgent, path) as { message?: string };
       alert(response.message || 'Upload command sent to agent');
     } catch (error) {
       console.error('Failed to create upload command:', error);
@@ -109,7 +109,7 @@ export default function FilesPage() {
     if (!savePath) return;
 
     try {
-      const response = await createDownloadCommand(selectedAgent, filename, savePath);
+      const response = await createDownloadCommand(selectedAgent, filename, savePath) as { message?: string };
       alert(response.message || 'Download command sent to agent');
     } catch (error) {
       console.error('Failed to create download command:', error);

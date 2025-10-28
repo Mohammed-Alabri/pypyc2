@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   getAgents,
@@ -11,6 +11,7 @@ import {
 } from '@/lib/api';
 import { Agent, AgentDetailed, CommandResult } from '@/types/agent';
 import { Terminal as TerminalIcon, Send, Loader2 } from 'lucide-react';
+import { Virtuoso } from 'react-virtuoso';
 
 function TerminalContent() {
   const searchParams = useSearchParams();
@@ -22,7 +23,18 @@ function TerminalContent() {
   const [commandHistory, setCommandHistory] = useState<CommandResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [initializedAgentId, setInitializedAgentId] = useState<number | null>(null);
-  const terminalRef = useRef<HTMLDivElement>(null);
+
+  // Memoized deduplicated history for stable array reference
+  const deduplicatedHistory = useMemo(() => {
+    const seen = new Set<number>();
+    return commandHistory.filter(cmd => {
+      if (seen.has(cmd.command_id)) {
+        return false;
+      }
+      seen.add(cmd.command_id);
+      return true;
+    });
+  }, [commandHistory]);
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -72,12 +84,6 @@ function TerminalContent() {
     }
   }, [selectedAgent, initializedAgentId]);
 
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
-  }, [commandHistory]);
-
   const handleSelectAgent = async (agentId: number) => {
     try {
       const agentData = await getAgent(agentId);
@@ -95,7 +101,7 @@ function TerminalContent() {
 
     setLoading(true);
     try {
-      const response = await executeCommand(selectedAgent.id, command);
+      const response = await executeCommand(selectedAgent.id, command) as { command_id: number };
       const commandId = response.command_id;
 
       // Poll for result (300ms for faster response)
@@ -195,85 +201,87 @@ function TerminalContent() {
               )}
             </div>
             {selectedAgent && (
-              <div
-                className={`px-3 py-1 rounded text-xs ${
-                  getAgentStatus(selectedAgent.last_seen) === 'online'
-                    ? 'bg-green-900 text-green-300'
-                    : 'bg-red-900 text-red-300'
-                }`}
-              >
-                {getAgentStatus(selectedAgent.last_seen).toUpperCase()}
+              <div className="flex items-center gap-3">
+                {loading && (
+                  <div className="flex items-center gap-2 px-3 py-1 rounded text-xs bg-yellow-900 text-yellow-300">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Running</span>
+                  </div>
+                )}
+                <div
+                  className={`px-3 py-1 rounded text-xs ${
+                    getAgentStatus(selectedAgent.last_seen) === 'online'
+                      ? 'bg-green-900 text-green-300'
+                      : 'bg-red-900 text-red-300'
+                  }`}
+                >
+                  {getAgentStatus(selectedAgent.last_seen).toUpperCase()}
+                </div>
               </div>
             )}
           </div>
 
           {/* Terminal Output */}
-          <div
-            ref={terminalRef}
-            className="flex-1 p-4 overflow-y-auto font-mono text-sm bg-black"
-          >
+          <div className="flex-1 flex flex-col font-mono text-sm bg-black overflow-hidden">
             {!selectedAgent ? (
-              <p className="text-green-500">
-                pypyc2 terminal v1.0.0
-                <br />
-                Select an agent from the sidebar to begin.
-              </p>
+              <div className="p-4">
+                <p className="text-green-500">
+                  pypyc2 terminal v1.0.0
+                  <br/>
+                  Select an agent from the sidebar to begin.
+                </p>
+              </div>
             ) : (
               <>
-                <p className="text-green-500 mb-4">
-                  Connected to {selectedAgent.hostname}
-                  <br />
-                  Type commands below and press Enter to execute.
-                  <br />
-                  ---
-                </p>
-                {(() => {
-                  // Defensive deduplication: ensure no duplicate command_ids
-                  const seen = new Set<number>();
-                  const deduplicatedHistory = commandHistory.filter(cmd => {
-                    if (seen.has(cmd.command_id)) {
-                      return false;
+                <Virtuoso
+                  data={deduplicatedHistory}
+                  followOutput="smooth"
+                  initialTopMostItemIndex={999999}
+                  style={{ flex: 1 }}
+                  components={{
+                    Header: () => (
+                      <div className="px-4 pt-4 pb-0">
+                        <p className="text-green-500 mb-4">
+                          Connected to {selectedAgent.hostname}
+                          <br />
+                          Type commands below and press Enter to execute.
+                          <br />
+                          ---
+                        </p>
+                      </div>
+                    )
+                  }}
+                  itemContent={(_index, cmd) => {
+                    // Format command display based on type
+                    let commandDisplay = '';
+                    if (cmd.type === 'exec' && cmd.data?.command) {
+                      commandDisplay = cmd.data.command;
+                    } else if (cmd.type === 'upload' && cmd.data?.source_path) {
+                      commandDisplay = `upload: ${cmd.data.source_path}`;
+                    } else if (cmd.type === 'download' && cmd.data?.filename) {
+                      commandDisplay = `download: ${cmd.data.filename} → ${cmd.data.save_as || cmd.data.filename}`;
+                    } else {
+                      commandDisplay = cmd.type;
                     }
-                    seen.add(cmd.command_id);
-                    return true;
-                  });
-                  return deduplicatedHistory;
-                })().map((cmd) => {
-                  // Format command display based on type
-                  let commandDisplay = '';
-                  if (cmd.type === 'exec' && cmd.data?.command) {
-                    commandDisplay = cmd.data.command;
-                  } else if (cmd.type === 'upload' && cmd.data?.source_path) {
-                    commandDisplay = `upload: ${cmd.data.source_path}`;
-                  } else if (cmd.type === 'download' && cmd.data?.filename) {
-                    commandDisplay = `download: ${cmd.data.filename} → ${cmd.data.save_as || cmd.data.filename}`;
-                  } else {
-                    commandDisplay = cmd.type;
-                  }
 
-                  return (
-                    <div key={cmd.command_id} className="mb-4">
-                      <p className="text-blue-400">
-                        $ {commandDisplay}
-                      </p>
-                      {cmd.status === 'completed' ? (
-                        <pre className="text-gray-300 whitespace-pre-wrap mt-1">
-                          {cmd.result || '(no output)'}
-                        </pre>
-                      ) : (
-                        <pre className="text-red-400 whitespace-pre-wrap mt-1">
-                          Error: {cmd.error || 'Command failed'}
-                        </pre>
-                      )}
-                    </div>
-                  );
-                })}
-                {loading && (
-                  <div className="flex items-center gap-2 text-yellow-400">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Executing command...</span>
-                  </div>
-                )}
+                    return (
+                      <div className="px-4 mb-4">
+                        <p className="text-blue-400">
+                          $ {commandDisplay}
+                        </p>
+                        {cmd.status === 'completed' ? (
+                          <pre className="text-gray-300 whitespace-pre-wrap mt-1">
+                            {cmd.result || '(no output)'}
+                          </pre>
+                        ) : (
+                          <pre className="text-red-400 whitespace-pre-wrap mt-1">
+                            Error: {cmd.error || 'Command failed'}
+                          </pre>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
               </>
             )}
           </div>
