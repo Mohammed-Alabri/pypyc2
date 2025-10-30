@@ -23,7 +23,7 @@ function TerminalContent() {
   const [commandHistory, setCommandHistory] = useState<CommandResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [initializedAgentId, setInitializedAgentId] = useState<number | null>(null);
-
+  const [followOutput, setFollowOutput] = useState(true);
   // Memoized deduplicated history for stable array reference
   const deduplicatedHistory = useMemo(() => {
     const seen = new Set<number>();
@@ -160,17 +160,15 @@ function TerminalContent() {
                 <button
                   key={agent.id}
                   onClick={() => handleSelectAgent(agent.id)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors ${
-                    isSelected
+                  className={`w-full text-left p-3 rounded-lg transition-colors ${isSelected
                       ? 'bg-red-600 text-white'
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <div
-                      className={`w-2 h-2 rounded-full ${
-                        status === 'online' ? 'bg-green-500' : 'bg-red-500'
-                      }`}
+                      className={`w-2 h-2 rounded-full ${status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                        }`}
                     />
                     <span className="font-semibold text-sm">{agent.hostname}</span>
                   </div>
@@ -209,11 +207,10 @@ function TerminalContent() {
                   </div>
                 )}
                 <div
-                  className={`px-3 py-1 rounded text-xs ${
-                    getAgentStatus(selectedAgent.last_seen) === 'online'
+                  className={`px-3 py-1 rounded text-xs ${getAgentStatus(selectedAgent.last_seen) === 'online'
                       ? 'bg-green-900 text-green-300'
                       : 'bg-red-900 text-red-300'
-                  }`}
+                    }`}
                 >
                   {getAgentStatus(selectedAgent.last_seen).toUpperCase()}
                 </div>
@@ -227,7 +224,7 @@ function TerminalContent() {
               <div className="p-4">
                 <p className="text-green-500">
                   pypyc2 terminal v1.0.0
-                  <br/>
+                  <br />
                   Select an agent from the sidebar to begin.
                 </p>
               </div>
@@ -236,7 +233,7 @@ function TerminalContent() {
                 <Virtuoso
                   data={deduplicatedHistory}
                   followOutput="smooth"
-                  initialTopMostItemIndex={999999}
+                  initialTopMostItemIndex={99999999}
                   style={{ flex: 1 }}
                   components={{
                     Header: () => (
@@ -245,10 +242,11 @@ function TerminalContent() {
                           Connected to {selectedAgent.hostname}
                           <br />
                           Type commands below and press Enter to execute.
-                          <br />
-                          ---
                         </p>
                       </div>
+                    ),
+                    Footer: () => (
+                      <div className="pb-1" />
                     )
                   }}
                   itemContent={(_index, cmd) => {
