@@ -62,14 +62,16 @@ function TerminalContent() {
       // If this is a new agent, initialize history
       if (selectedAgent.id !== initializedAgentId) {
         const completedCommands = selectedAgent.commands.filter(
-          (cmd) => cmd.status === 'completed' || cmd.status === 'failed'
+          (cmd) => cmd.type !== 'list_directory' &&
+                   (cmd.status === 'completed' || cmd.status === 'failed')
         );
         setCommandHistory(completedCommands as CommandResult[]);
         setInitializedAgentId(selectedAgent.id);
       } else {
         // Same agent - merge new commands from server with local history
         const serverCommands = selectedAgent.commands.filter(
-          (cmd) => cmd.status === 'completed' || cmd.status === 'failed'
+          (cmd) => cmd.type !== 'list_directory' &&
+                   (cmd.status === 'completed' || cmd.status === 'failed')
         );
 
         setCommandHistory((prevHistory) => {

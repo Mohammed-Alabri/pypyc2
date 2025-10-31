@@ -100,6 +100,59 @@ export async function createDownloadCommand(
   });
 }
 
+export async function listDirectory(
+  agentId: number,
+  path: string
+): Promise<{ name: string; is_directory: boolean; size: number; path: string }[]> {
+  // Create list_directory command
+  const params = new URLSearchParams({ path });
+  const response = await apiCall<{ command_id: number }>(`/command/${agentId}/list_directory?${params.toString()}`, {
+    method: 'POST',
+  });
+
+  // Poll for result
+  const commandId = response.command_id;
+  let attempts = 0;
+  const maxAttempts = 20; // 10 seconds total (20 * 500ms)
+
+  while (attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    attempts++;
+
+    try {
+      const result = await getCommandResult(agentId, commandId);
+
+      if (result.status === 'completed' && result.result) {
+        // Parse the JSON result
+        const parsed = JSON.parse(result.result);
+        if (parsed.status === 'success') {
+          return parsed.items;
+        } else {
+          throw new Error(parsed.error || 'Failed to list directory');
+        }
+      } else if (result.status === 'failed') {
+        throw new Error(result.error || 'Command failed');
+      }
+      // If status is still 'queued', continue polling
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Only continue polling if command not found yet (404) or still queued
+      const isCommandNotReady = errorMessage.includes('404') ||
+                                 errorMessage.includes('not found') ||
+                                 errorMessage.includes('queued');
+
+      if (!isCommandNotReady || attempts >= maxAttempts) {
+        // Real error or timeout - stop polling
+        throw error;
+      }
+      // Command not ready yet, continue polling
+    }
+  }
+
+  throw new Error('Timeout waiting for directory listing (agent may be offline)');
+}
+
 export async function getCommandResult(
   agentId: number,
   commandId: number

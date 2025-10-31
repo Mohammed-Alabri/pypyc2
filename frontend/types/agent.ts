@@ -22,11 +22,12 @@ export interface CommandData {
   filename?: string;        // For upload/download commands
   save_as?: string;         // For download commands
   url?: string;             // For download commands
+  path?: string;            // For list_directory commands
 }
 
 export interface Command {
   command_id: number;
-  type: 'exec' | 'upload' | 'download';
+  type: 'exec' | 'upload' | 'download' | 'list_directory' | 'terminate';
   data?: CommandData;
   status: 'pending' | 'retrieved' | 'completed' | 'failed';
   created_at: string;

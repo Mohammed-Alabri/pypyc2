@@ -220,6 +220,28 @@ def create_terminate_command(agent_id: int, user: Dict = Depends(get_current_use
     }
 
 
+@app.post("/command/{agent_id}/list_directory")
+def create_list_directory_command(agent_id: int, path: str, user: Dict = Depends(get_current_user)):
+    """
+    Create a list_directory command - agent will list contents of a directory
+
+    Args:
+        agent_id: The agent ID
+        path: The directory path to list
+    """
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    ag: Agent = agents[agent_id]
+    command_id = ag.add_command("list_directory", {"path": path})
+    return {
+        'command_id': command_id,
+        'type': 'list_directory',
+        'status': 'queued',
+        'message': f'Agent will list directory: {path}'
+    }
+
+
 @app.get("/command/{agent_id}/{command_id}")
 def get_command_result(agent_id: int, command_id: int, user: Dict = Depends(get_current_user)):
     """Get the result of a specific command"""

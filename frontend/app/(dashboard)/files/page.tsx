@@ -20,6 +20,7 @@ import {
   ArrowDownToLine,
   Loader2,
 } from 'lucide-react';
+import FileTreeModal from '@/components/FileTreeModal';
 
 export default function FilesPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -27,6 +28,7 @@ export default function FilesPage() {
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [isFileTreeModalOpen, setIsFileTreeModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -84,11 +86,13 @@ export default function FilesPage() {
     }
   };
 
-  const handleRequestFileFromAgent = async () => {
+  const handleRequestFileFromAgent = () => {
     if (!selectedAgent) return;
+    setIsFileTreeModalOpen(true);
+  };
 
-    const path = prompt('Enter the file path on the agent to upload:');
-    if (!path) return;
+  const handleFileSelected = async (path: string) => {
+    if (!selectedAgent) return;
 
     try {
       const response = await createUploadCommand(selectedAgent, path) as { message?: string };
@@ -256,6 +260,16 @@ export default function FilesPage() {
           )}
         </div>
       </div>
+
+      {/* File Tree Modal */}
+      {selectedAgent && (
+        <FileTreeModal
+          agentId={selectedAgent}
+          isOpen={isFileTreeModalOpen}
+          onClose={() => setIsFileTreeModalOpen(false)}
+          onSelectFile={handleFileSelected}
+        />
+      )}
     </div>
   );
 }
