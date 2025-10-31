@@ -19,7 +19,8 @@ export function AgentNode({ agent, x, y, onMouseDown, isDragging, canvasWidth, c
   const isOnline = status === 'online';
 
   const statusColor = isOnline ? '#10B981' : '#EF4444'; // green-500 : red-500
-  const bgColor = '#1F2937'; // gray-800
+  const bgColor = 'rgba(31, 41, 55, 0.6)'; // semi-transparent gray-800
+  const statusGlow = isOnline ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
 
   // Smart tooltip positioning based on agent location
   const isTopHalf = y < canvasHeight / 2;
@@ -27,7 +28,7 @@ export function AgentNode({ agent, x, y, onMouseDown, isDragging, canvasWidth, c
 
   // Calculate tooltip position to keep it within canvas bounds
   const tooltipWidth = 160;
-  const tooltipHeight = 105; // Increased from 90 to 105 to fit all content
+  const tooltipHeight = 120; // Increased to 120 to prevent status badge clipping
   const tooltipPadding = 10;
 
   let tooltipX = x - tooltipWidth / 2; // Center by default
@@ -66,18 +67,105 @@ export function AgentNode({ agent, x, y, onMouseDown, isDragging, canvasWidth, c
         opacity: isDragging ? 0.8 : 1,
       }}
     >
+      {/* Consolidated defs for animations and gradients */}
+      <defs>
+        {/* Badge gradient */}
+        {agent.total_commands > 0 && (
+          <linearGradient id={`badge-gradient-${agent.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style={{ stopColor: '#7C3AED', stopOpacity: 1 }} />
+            <stop offset="100%" style={{ stopColor: '#EC4899', stopOpacity: 1 }} />
+          </linearGradient>
+        )}
+
+        {/* CSS animations */}
+        <style>{`
+          @keyframes pulse-ring-${agent.id} {
+            0% {
+              opacity: 0.8;
+              transform: scale(1);
+            }
+            100% {
+              opacity: 0;
+              transform: scale(1.4);
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            * {
+              animation-duration: 0.01ms !important;
+              animation-iteration-count: 1 !important;
+              transition-duration: 0.01ms !important;
+            }
+          }
+        `}</style>
+      </defs>
+
+      {/* Pulsing ring for online agents */}
+      {isOnline && (
+        <>
+          <rect
+            x={x - 45}
+            y={y - 40}
+            width="90"
+            height="80"
+            rx="8"
+            fill="none"
+            stroke={statusColor}
+            strokeWidth="2"
+            style={{
+              animation: `pulse-ring-${agent.id} 2s ease-out infinite`,
+              transformOrigin: `${x}px ${y}px`,
+            }}
+          />
+          <rect
+            x={x - 45}
+            y={y - 40}
+            width="90"
+            height="80"
+            rx="8"
+            fill="none"
+            stroke={statusColor}
+            strokeWidth="2"
+            style={{
+              animation: `pulse-ring-${agent.id} 2s ease-out infinite`,
+              animationDelay: '1s',
+              transformOrigin: `${x}px ${y}px`,
+            }}
+          />
+        </>
+      )}
+
+      {/* Glow effect */}
+      <rect
+        x={x - 45}
+        y={y - 40}
+        width="90"
+        height="80"
+        rx="8"
+        fill="none"
+        stroke={statusColor}
+        strokeWidth="1"
+        opacity={isHovered ? "0.5" : "0.3"}
+        style={{
+          filter: `blur(8px)`,
+        }}
+      />
+
       {/* Main card background */}
       <rect
         x={x - 45}
         y={y - 40}
         width="90"
         height="80"
-        rx="6"
+        rx="8"
         fill={bgColor}
         stroke={statusColor}
         strokeWidth="2"
         style={{
-          filter: isHovered ? 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' : 'none',
+          filter: isHovered
+            ? `drop-shadow(0 8px 16px ${statusGlow}) drop-shadow(0 0 20px ${statusGlow})`
+            : `drop-shadow(0 4px 8px rgba(0,0,0,0.3))`,
+          backdropFilter: 'blur(12px)',
         }}
       />
 
@@ -115,13 +203,30 @@ export function AgentNode({ agent, x, y, onMouseDown, isDragging, canvasWidth, c
       {/* Command count badge */}
       {agent.total_commands > 0 && (
         <>
+          {/* Badge glow */}
           <rect
             x={x + 20}
             y={y - 38}
             width="22"
             height="14"
             rx="7"
-            fill="#7C3AED" // purple-600
+            fill="#7C3AED"
+            opacity="0.5"
+            style={{
+              filter: 'blur(4px)',
+            }}
+          />
+          {/* Badge background with gradient */}
+          <rect
+            x={x + 20}
+            y={y - 38}
+            width="22"
+            height="14"
+            rx="7"
+            fill={`url(#badge-gradient-${agent.id})`}
+            style={{
+              filter: 'drop-shadow(0 2px 4px rgba(124, 58, 237, 0.4))',
+            }}
           />
           <text
             x={x + 31}
@@ -141,22 +246,29 @@ export function AgentNode({ agent, x, y, onMouseDown, isDragging, canvasWidth, c
           y={tooltipY}
           width={tooltipWidth}
           height={tooltipHeight}
-          style={{ pointerEvents: 'none' }}
+          style={{ pointerEvents: 'none', overflow: 'visible' }}
         >
-          <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs shadow-xl">
-            <p className="text-white font-semibold mb-1 truncate">{agent.hostname}</p>
-            <p className="text-gray-400 truncate">
-              <span className="text-gray-500">IP:</span> {agent.ipaddr}
+          <div className="bg-gray-900/90 backdrop-blur-md border border-white/20 rounded-xl px-3 pt-3 pb-3.5 text-xs shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200"
+            style={{
+              boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${statusGlow}`,
+            }}
+          >
+            <p className="text-white font-semibold mb-1.5 truncate text-sm">{agent.hostname}</p>
+            <p className="text-gray-300 truncate mb-0.5">
+              <span className="text-gray-500">IP:</span> <span className="font-mono">{agent.ipaddr}</span>
             </p>
-            <p className="text-gray-400 truncate">
+            <p className="text-gray-300 truncate mb-0.5">
               <span className="text-gray-500">User:</span> {agent.user}
             </p>
-            <p className="text-gray-400">
-              <span className="text-gray-500">Commands:</span> {agent.total_commands}
+            <p className="text-gray-300 mb-1.5">
+              <span className="text-gray-500">Commands:</span> <span className="font-semibold">{agent.total_commands}</span>
             </p>
-            <p className={`text-xs mt-1 ${isOnline ? 'text-green-400' : 'text-red-400'}`}>
-              ● {status.toUpperCase()}
-            </p>
+            <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isOnline ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-400' : 'bg-red-400'}`} style={{
+                boxShadow: isOnline ? '0 0 4px #10B981' : '0 0 4px #EF4444'
+              }}></span>
+              {status.toUpperCase()}
+            </div>
           </div>
         </foreignObject>
       )}
