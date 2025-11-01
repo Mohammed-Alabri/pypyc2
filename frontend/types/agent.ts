@@ -8,6 +8,7 @@ export interface Agent {
   total_commands: number;
   uploaded_files_count: number;
   downloaded_files_count: number;
+  sleep_time: number;
 }
 
 export interface AgentDetailed extends Agent {
@@ -23,11 +24,12 @@ export interface CommandData {
   save_as?: string;         // For download commands
   url?: string;             // For download commands
   path?: string;            // For list_directory commands
+  sleep_time?: number;      // For set_sleep_time commands
 }
 
 export interface Command {
   command_id: number;
-  type: 'exec' | 'upload' | 'download' | 'list_directory' | 'terminate';
+  type: 'exec' | 'upload' | 'download' | 'list_directory' | 'set_sleep_time' | 'terminate';
   data?: CommandData;
   status: 'pending' | 'retrieved' | 'completed' | 'failed';
   created_at: string;

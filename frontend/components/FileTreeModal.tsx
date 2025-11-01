@@ -14,11 +14,12 @@ interface FileItem {
 interface TreeNodeProps {
   item: FileItem;
   agentId: number;
+  agentSleepTime: number;
   onSelectFile: (path: string) => void;
   level: number;
 }
 
-function TreeNode({ item, agentId, onSelectFile, level }: TreeNodeProps) {
+function TreeNode({ item, agentId, agentSleepTime, onSelectFile, level }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [children, setChildren] = useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,7 +41,7 @@ function TreeNode({ item, agentId, onSelectFile, level }: TreeNodeProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const items = await listDirectory(agentId, item.path);
+        const items = await listDirectory(agentId, item.path, agentSleepTime);
         setChildren(items);
         setIsExpanded(true);
       } catch (err) {
@@ -104,6 +105,7 @@ function TreeNode({ item, agentId, onSelectFile, level }: TreeNodeProps) {
               key={`${child.path}-${index}`}
               item={child}
               agentId={agentId}
+              agentSleepTime={agentSleepTime}
               onSelectFile={onSelectFile}
               level={level + 1}
             />
@@ -124,12 +126,13 @@ function formatBytes(bytes: number): string {
 
 interface FileTreeModalProps {
   agentId: number;
+  agentSleepTime?: number;
   isOpen: boolean;
   onClose: () => void;
   onSelectFile: (path: string) => void;
 }
 
-export default function FileTreeModal({ agentId, isOpen, onClose, onSelectFile }: FileTreeModalProps) {
+export default function FileTreeModal({ agentId, agentSleepTime = 3, isOpen, onClose, onSelectFile }: FileTreeModalProps) {
   const [roots, setRoots] = useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +149,7 @@ export default function FileTreeModal({ agentId, isOpen, onClose, onSelectFile }
     setError(null);
     try {
       // Try to load C:\ for Windows
-      const items = await listDirectory(agentId, 'C:\\');
+      const items = await listDirectory(agentId, 'C:\\', agentSleepTime);
       // Validate that we got actual items back
       if (items && Array.isArray(items)) {
         setRoots([{
@@ -161,7 +164,7 @@ export default function FileTreeModal({ agentId, isOpen, onClose, onSelectFile }
     } catch (err) {
       // If C:\ fails, try root / for Unix-like systems
       try {
-        const items = await listDirectory(agentId, '/');
+        const items = await listDirectory(agentId, '/', agentSleepTime);
         // Validate that we got actual items back
         if (items && Array.isArray(items)) {
           setRoots([{
@@ -252,6 +255,7 @@ export default function FileTreeModal({ agentId, isOpen, onClose, onSelectFile }
                   key={`${root.path}-${index}`}
                   item={root}
                   agentId={agentId}
+                  agentSleepTime={agentSleepTime}
                   onSelectFile={handleSelectFile}
                   level={0}
                 />

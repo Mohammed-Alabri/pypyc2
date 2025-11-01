@@ -242,6 +242,33 @@ def create_list_directory_command(agent_id: int, path: str, user: Dict = Depends
     }
 
 
+@app.post("/command/{agent_id}/set_sleep_time")
+def create_set_sleep_time_command(agent_id: int, sleep_time: int, user: Dict = Depends(get_current_user)):
+    """
+    Create a set_sleep_time command - agent will change its polling interval
+
+    Args:
+        agent_id: The agent ID
+        sleep_time: New sleep time in seconds (1-60)
+    """
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    # Validate sleep_time
+    if sleep_time < 1 or sleep_time > 60:
+        raise HTTPException(status_code=400, detail="Sleep time must be between 1 and 60 seconds")
+
+    ag: Agent = agents[agent_id]
+    old_sleep_time = ag.sleep_time
+    command_id = ag.add_command("set_sleep_time", {"sleep_time": sleep_time})
+    return {
+        'command_id': command_id,
+        'type': 'set_sleep_time',
+        'status': 'queued',
+        'message': f'Agent will change sleep time from {old_sleep_time}s to {sleep_time}s'
+    }
+
+
 @app.get("/command/{agent_id}/{command_id}")
 def get_command_result(agent_id: int, command_id: int, user: Dict = Depends(get_current_user)):
     """Get the result of a specific command"""
@@ -302,9 +329,20 @@ def set_command_result(agent_id: int, command_id: int, status: str, result: str 
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
     ag: Agent = agents[agent_id]
+
+    # Get command info before setting result
+    command_info = ag.commands.get(command_id)
+
     success = ag.set_result(command_id, status, result, error)
     if not success:
         raise HTTPException(status_code=404, detail=f"Command {command_id} not found")
+
+    # If set_sleep_time command succeeded, update agent's sleep_time
+    if command_info and command_info['type'] == 'set_sleep_time' and status == 'success':
+        new_sleep_time = command_info['data'].get('sleep_time')
+        if new_sleep_time:
+            ag.set_sleep_time(new_sleep_time)
+
     return {'status': True, 'message': 'Result recorded'}
 
 

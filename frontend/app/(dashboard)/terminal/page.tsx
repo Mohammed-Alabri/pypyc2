@@ -134,11 +134,12 @@ function TerminalContent() {
         }
       }, 300);
 
-      // Timeout after 30 seconds
+      // Timeout based on agent sleep_time (3x sleep_time + 10s buffer)
+      const timeoutMs = ((selectedAgent.sleep_time ?? 3) * 3 + 10) * 1000;
       setTimeout(() => {
         clearInterval(pollInterval);
         setLoading(false);
-      }, 30000);
+      }, timeoutMs);
     } catch (error) {
       console.error('Failed to execute command:', error);
       setLoading(false);
@@ -155,7 +156,7 @@ function TerminalContent() {
           <h2 className="font-semibold mb-4">Select Agent</h2>
           <div className="space-y-2">
             {agents.map((agent) => {
-              const status = getAgentStatus(agent.last_seen);
+              const status = getAgentStatus(agent.last_seen, agent.sleep_time ?? 3);
               const isSelected = selectedAgent?.id === agent.id;
 
               return (
@@ -209,12 +210,12 @@ function TerminalContent() {
                   </div>
                 )}
                 <div
-                  className={`px-3 py-1 rounded text-xs ${getAgentStatus(selectedAgent.last_seen) === 'online'
+                  className={`px-3 py-1 rounded text-xs ${getAgentStatus(selectedAgent.last_seen, selectedAgent.sleep_time ?? 3) === 'online'
                       ? 'bg-green-900 text-green-300'
                       : 'bg-red-900 text-red-300'
                     }`}
                 >
-                  {getAgentStatus(selectedAgent.last_seen).toUpperCase()}
+                  {getAgentStatus(selectedAgent.last_seen, selectedAgent.sleep_time ?? 3).toUpperCase()}
                 </div>
               </div>
             )}
@@ -260,6 +261,10 @@ function TerminalContent() {
                       commandDisplay = `upload: ${cmd.data.source_path}`;
                     } else if (cmd.type === 'download' && cmd.data?.filename) {
                       commandDisplay = `download: ${cmd.data.filename} → ${cmd.data.save_as || cmd.data.filename}`;
+                    } else if (cmd.type === 'set_sleep_time' && cmd.data?.sleep_time) {
+                      commandDisplay = `set_sleep_time: ${cmd.data.sleep_time}s`;
+                    } else if (cmd.type === 'list_directory' && cmd.data?.path) {
+                      commandDisplay = `list_directory: ${cmd.data.path}`;
                     } else {
                       commandDisplay = cmd.type;
                     }

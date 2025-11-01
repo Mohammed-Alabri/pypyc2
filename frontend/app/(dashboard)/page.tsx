@@ -28,7 +28,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  const onlineAgents = agents.filter(a => getAgentStatus(a.last_seen) === 'online');
+  const onlineAgents = agents.filter(a => getAgentStatus(a.last_seen, a.sleep_time ?? 3) === 'online');
   const totalCommands = agents.reduce((sum, a) => sum + a.total_commands, 0);
   const totalFiles = agents.reduce((sum, a) => sum + a.uploaded_files_count, 0);
 

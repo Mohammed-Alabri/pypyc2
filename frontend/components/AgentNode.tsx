@@ -15,7 +15,7 @@ interface AgentNodeProps {
 
 export function AgentNode({ agent, x, y, onMouseDown, isDragging, canvasWidth, canvasHeight }: AgentNodeProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const status = getAgentStatus(agent.last_seen);
+  const status = getAgentStatus(agent.last_seen, agent.sleep_time ?? 3);
   const isOnline = status === 'online';
 
   const statusColor = isOnline ? '#10B981' : '#EF4444'; // green-500 : red-500

@@ -100,9 +100,23 @@ export async function createDownloadCommand(
   });
 }
 
+export async function setSleepTime(
+  agentId: number,
+  sleepTime: number
+): Promise<{ command_id: number; type: string; status: string; message: string }> {
+  const params = new URLSearchParams({ sleep_time: sleepTime.toString() });
+  return apiCall<{ command_id: number; type: string; status: string; message: string }>(
+    `/command/${agentId}/set_sleep_time?${params.toString()}`,
+    {
+      method: 'POST',
+    }
+  );
+}
+
 export async function listDirectory(
   agentId: number,
-  path: string
+  path: string,
+  agentSleepTime: number = 3
 ): Promise<{ name: string; is_directory: boolean; size: number; path: string }[]> {
   // Create list_directory command
   const params = new URLSearchParams({ path });
@@ -113,7 +127,8 @@ export async function listDirectory(
   // Poll for result
   const commandId = response.command_id;
   let attempts = 0;
-  const maxAttempts = 20; // 10 seconds total (20 * 500ms)
+  // Calculate timeout based on agent sleep_time: (sleep_time * 3 + 10) / 0.5
+  const maxAttempts = Math.max(20, Math.ceil((agentSleepTime * 3 + 10) / 0.5));
 
   while (attempts < maxAttempts) {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -233,13 +248,14 @@ export async function downloadFile(agentDir: string, filename: string): Promise<
 }
 
 // Utility functions
-export function getAgentStatus(lastSeen: string): 'online' | 'offline' {
+export function getAgentStatus(lastSeen: string, sleepTime: number = 3): 'online' | 'offline' {
   const lastSeenDate = new Date(lastSeen);
   const now = new Date();
   const diffSeconds = (now.getTime() - lastSeenDate.getTime()) / 1000;
 
-  // Consider online if last seen within 15 seconds (agent polls every 3s, terminal refreshes every 5s)
-  return diffSeconds < 20 ? 'online' : 'offline';
+  // Agent is online if last seen within 2x sleep_time + 5s buffer
+  const threshold = sleepTime * 2 + 5;
+  return diffSeconds < threshold ? 'online' : 'offline';
 }
 
 export function formatBytes(bytes: number): string {

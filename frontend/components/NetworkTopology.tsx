@@ -431,7 +431,7 @@ export function NetworkTopology({ agents, onRefresh }: NetworkTopologyProps) {
         {/* Connection lines (draw first, so they're behind nodes) */}
         {agents.map((agent, index) => {
           const agentPos = getAgentPos(agent.id, index);
-          const isOnline = getAgentStatus(agent.last_seen) === 'online';
+          const isOnline = getAgentStatus(agent.last_seen, agent.sleep_time ?? 3) === 'online';
 
           return (
             <ConnectionLine

@@ -265,6 +265,7 @@ export default function FilesPage() {
       {selectedAgent && (
         <FileTreeModal
           agentId={selectedAgent}
+          agentSleepTime={agents.find(a => a.id === selectedAgent)?.sleep_time ?? 3}
           isOpen={isFileTreeModalOpen}
           onClose={() => setIsFileTreeModalOpen(false)}
           onSelectFile={handleFileSelected}

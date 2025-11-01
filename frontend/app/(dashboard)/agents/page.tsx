@@ -31,7 +31,7 @@ export default function AgentsPage() {
 
   const filteredAgents = agents.filter((agent) => {
     if (filter === 'all') return true;
-    const status = getAgentStatus(agent.last_seen);
+    const status = getAgentStatus(agent.last_seen, agent.sleep_time ?? 3);
     return status === filter;
   });
 
@@ -59,7 +59,7 @@ export default function AgentsPage() {
             }`}
           >
             Online (
-            {agents.filter((a) => getAgentStatus(a.last_seen) === 'online').length})
+            {agents.filter((a) => getAgentStatus(a.last_seen, a.sleep_time ?? 3) === 'online').length})
           </button>
           <button
             onClick={() => setFilter('offline')}
@@ -70,7 +70,7 @@ export default function AgentsPage() {
             }`}
           >
             Offline (
-            {agents.filter((a) => getAgentStatus(a.last_seen) === 'offline').length})
+            {agents.filter((a) => getAgentStatus(a.last_seen, a.sleep_time ?? 3) === 'offline').length})
           </button>
         </div>
       </div>
@@ -88,7 +88,7 @@ export default function AgentsPage() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredAgents.map((agent) => {
-            const status = getAgentStatus(agent.last_seen);
+            const status = getAgentStatus(agent.last_seen, agent.sleep_time ?? 3);
             return (
               <div
                 key={agent.id}

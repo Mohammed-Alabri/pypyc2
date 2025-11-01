@@ -9,6 +9,7 @@ import {
   formatBytes,
   downloadFile,
   deleteAgent,
+  setSleepTime,
 } from '@/lib/api';
 import { AgentDetailed } from '@/types/agent';
 import {
@@ -25,6 +26,7 @@ import {
   Copy,
   Check,
   Trash2,
+  Timer,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -42,6 +44,9 @@ export default function AgentDetailPage() {
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showSleepTimeModal, setShowSleepTimeModal] = useState(false);
+  const [newSleepTime, setNewSleepTime] = useState<string>('3');
+  const [isChangingSleepTime, setIsChangingSleepTime] = useState(false);
 
   useEffect(() => {
     if (!agentId || isNaN(agentId)) {
@@ -130,6 +135,37 @@ export default function AgentDetailPage() {
     }
   };
 
+  const handleChangeSleepTime = async () => {
+    if (!agent) return;
+
+    const sleepTimeValue = parseInt(newSleepTime);
+    if (isNaN(sleepTimeValue) || sleepTimeValue < 1 || sleepTimeValue > 60) {
+      alert('Sleep time must be a number between 1 and 60 seconds');
+      return;
+    }
+
+    setIsChangingSleepTime(true);
+    try {
+      const response = await setSleepTime(agentId, sleepTimeValue);
+      alert(response.message || 'Sleep time command sent successfully');
+      setShowSleepTimeModal(false);
+      // Refresh agent data to show updated sleep_time once command completes
+      setTimeout(() => fetchAgent(), 2000);
+    } catch (error) {
+      console.error('Failed to set sleep time:', error);
+      alert(`Failed to set sleep time: ${error}`);
+    } finally {
+      setIsChangingSleepTime(false);
+    }
+  };
+
+  const openSleepTimeModal = () => {
+    if (agent) {
+      setNewSleepTime((agent.sleep_time ?? 3).toString());
+      setShowSleepTimeModal(true);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center">
@@ -160,7 +196,7 @@ export default function AgentDetailPage() {
     );
   }
 
-  const status = getAgentStatus(agent.last_seen);
+  const status = getAgentStatus(agent.last_seen, agent.sleep_time ?? 3);
   const filteredCommands =
     commandFilter === 'all'
       ? agent.commands
@@ -189,6 +225,14 @@ export default function AgentDetailPage() {
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
+          </button>
+          <button
+            onClick={openSleepTimeModal}
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg transition-colors"
+            title="Change polling interval"
+          >
+            <Timer className="w-4 h-4" />
+            Sleep Time ({agent.sleep_time ?? 3}s)
           </button>
           <Link
             href={`/terminal?agent=${agent.id}`}
@@ -345,6 +389,13 @@ export default function AgentDetailPage() {
                 <p className="text-gray-400 text-sm">Last Seen</p>
                 <p className="mt-1">{formatDate(agent.last_seen)}</p>
               </div>
+              <div>
+                <p className="text-gray-400 text-sm">Polling Interval</p>
+                <p className="mt-1 flex items-center gap-2">
+                  <Timer className="w-4 h-4 text-purple-500" />
+                  <span className="font-semibold text-purple-400">{agent.sleep_time ?? 3}s</span>
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -419,6 +470,10 @@ export default function AgentDetailPage() {
                       ? `upload: ${cmd.data.source_path}`
                       : cmd.type === 'download' && cmd.data?.filename
                       ? `download: ${cmd.data.filename}`
+                      : cmd.type === 'set_sleep_time' && cmd.data?.sleep_time
+                      ? `set_sleep_time: ${cmd.data.sleep_time}s`
+                      : cmd.type === 'list_directory' && cmd.data?.path
+                      ? `list_directory: ${cmd.data.path}`
                       : cmd.type;
 
                   return (
@@ -646,6 +701,85 @@ export default function AgentDetailPage() {
                   <>
                     <Trash2 className="w-4 h-4" />
                     {status === 'online' ? 'Terminate & Delete' : 'Delete Permanently'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sleep Time Modal */}
+      {showSleepTimeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-purple-500/20 rounded-full">
+                <Timer className="w-6 h-6 text-purple-500" />
+              </div>
+              <h2 className="text-xl font-bold">Change Sleep Time</h2>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-gray-300 mb-4">
+                Adjust how often the agent polls the server for commands.
+              </p>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Polling Interval (seconds)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={newSleepTime}
+                  onChange={(e) => setNewSleepTime(e.target.value)}
+                  className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:outline-none focus:border-purple-500"
+                  disabled={isChangingSleepTime}
+                />
+              </div>
+
+              <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3 mb-4">
+                <p className="text-blue-300 text-sm">
+                  <strong>Current:</strong> {agent?.sleep_time ?? 3}s
+                  <br />
+                  <strong>Range:</strong> 1-60 seconds
+                </p>
+              </div>
+
+              <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-3">
+                <p className="text-yellow-300 text-sm font-semibold mb-1">Note:</p>
+                <ul className="text-yellow-200 text-sm space-y-1 list-disc list-inside">
+                  <li>Lower values = Faster response but more network traffic</li>
+                  <li>Higher values = Slower response but less network traffic</li>
+                  <li>Recommended: 3-10 seconds for normal operation</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSleepTimeModal(false)}
+                disabled={isChangingSleepTime}
+                className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleChangeSleepTime}
+                disabled={isChangingSleepTime}
+                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isChangingSleepTime ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Timer className="w-4 h-4" />
+                    Change Sleep Time
                   </>
                 )}
               </button>
