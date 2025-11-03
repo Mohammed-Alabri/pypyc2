@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, Terminal, FolderOpen, LogOut } from 'lucide-react';
+import { Home, Users, Terminal, FolderOpen, Target, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -11,6 +11,7 @@ const navigation = [
   { name: 'Agents', href: '/agents', icon: Users },
   { name: 'Terminal', href: '/terminal', icon: Terminal },
   { name: 'Files', href: '/files', icon: FolderOpen },
+  { name: 'Payloads', href: '/payloads', icon: Target },
 ];
 
 export function Sidebar() {
