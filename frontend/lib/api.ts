@@ -270,3 +270,8 @@ export function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return date.toLocaleString();
 }
+
+// Payload token management
+export async function getPayloadToken(): Promise<{ token: string; expires_in: number; lifetime: number }> {
+  return apiCall<{ token: string; expires_in: number; lifetime: number }>('/api/payload-token');
+}

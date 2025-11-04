@@ -1,6 +1,6 @@
 from fastapi import Header, HTTPException
 from typing import Dict
-import auth
+from core import security
 
 
 async def get_current_user(authorization: str = Header(...)) -> Dict:
@@ -26,7 +26,7 @@ async def get_current_user(authorization: str = Header(...)) -> Dict:
     token = authorization.replace("Bearer ", "")
 
     # Validate session
-    session = auth.validate_session(token)
+    session = security.validate_session(token)
 
     if not session:
         raise HTTPException(

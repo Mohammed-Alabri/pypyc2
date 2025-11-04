@@ -1,7 +1,13 @@
+"""
+Authentication Routes
+Handles user login, logout, and session validation
+"""
+
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
-import auth
+from core import security
+
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -36,7 +42,7 @@ async def login(credentials: LoginRequest):
     Returns a bearer token for subsequent requests
     """
     # Authenticate user
-    user = auth.authenticate_user(credentials.username, credentials.password)
+    user = security.authenticate_user(credentials.username, credentials.password)
 
     if not user:
         raise HTTPException(
@@ -45,10 +51,10 @@ async def login(credentials: LoginRequest):
         )
 
     # Create session and generate token
-    token = auth.create_session(credentials.username)
+    token = security.create_session(credentials.username)
 
     # Clean up expired sessions periodically
-    auth.cleanup_expired_sessions()
+    security.cleanup_expired_sessions()
 
     return LoginResponse(
         token=token,
@@ -74,7 +80,7 @@ async def logout(authorization: str = Header(...)):
     token = authorization.replace("Bearer ", "")
 
     # Revoke session (idempotent - succeeds even if session not found)
-    revoked = auth.revoke_session(token)
+    revoked = security.revoke_session(token)
 
     return LogoutResponse(
         status="success",
@@ -95,7 +101,7 @@ async def verify_token(authorization: str = Header(...)):
     token = authorization.replace("Bearer ", "")
 
     # Validate session
-    session = auth.validate_session(token)
+    session = security.validate_session(token)
 
     if not session:
         return VerifyResponse(authenticated=False)
