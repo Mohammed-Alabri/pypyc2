@@ -20,3 +20,8 @@ class CommandResult(BaseModel):
     status: str  # "success", "error"
     result: Optional[str] = None  # Output for exec commands
     error: Optional[str] = None  # Error message if failed
+
+
+class AgentIntial(BaseModel):
+    hostname: str
+    user: str

