@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 class Agent:
     def __init__(self, id, ipaddr, hostname, user):
@@ -11,8 +11,8 @@ class Agent:
         self.command_counter = 1
         self.uploaded_files = []  # Track uploaded files from this agent
         self.downloaded_files = []  # Track files sent to this agent
-        self.last_seen = datetime.now().isoformat()  # Track last communication
-        self.joined_at = datetime.now().isoformat()  # Track when agent joined
+        self.last_seen = datetime.now(timezone.utc).isoformat()  # Track last communication
+        self.joined_at = datetime.now(timezone.utc).isoformat()  # Track when agent joined
         self.sleep_time = 3  # Agent polling interval in seconds (default: 3)
 
     def add_command(self, command_type: str, command_data: Dict[str, Any]) -> int:
@@ -38,7 +38,7 @@ class Agent:
             'data': command_data,
             'result': None,
             'status': 'pending',  # pending, retrieved, completed, failed
-            'created_at': datetime.now().isoformat(),
+            'created_at': datetime.now(timezone.utc).isoformat(),
             'retrieved_at': None,
             'completed_at': None
         }
@@ -57,7 +57,7 @@ class Agent:
                 })
                 # Mark as retrieved
                 cmd['status'] = 'retrieved'
-                cmd['retrieved_at'] = datetime.now().isoformat()
+                cmd['retrieved_at'] = datetime.now(timezone.utc).isoformat()
         return pending
 
     def set_result(self, command_id: int, status: str, result: Optional[str] = None,
@@ -75,7 +75,7 @@ class Agent:
             self.commands[command_id]['result'] = result
             self.commands[command_id]['status'] = 'completed' if status == 'success' else 'failed'
             self.commands[command_id]['error'] = error
-            self.commands[command_id]['completed_at'] = datetime.now().isoformat()
+            self.commands[command_id]['completed_at'] = datetime.now(timezone.utc).isoformat()
             return True
         return False
 
@@ -101,19 +101,19 @@ class Agent:
             'filename': filename,
             'filepath': filepath,
             'size': size,
-            'uploaded_at': datetime.now().isoformat()
+            'uploaded_at': datetime.now(timezone.utc).isoformat()
         })
 
     def add_downloaded_file(self, filename: str):
         """Track a file downloaded by this agent"""
         self.downloaded_files.append({
             'filename': filename,
-            'downloaded_at': datetime.now().isoformat()
+            'downloaded_at': datetime.now(timezone.utc).isoformat()
         })
 
     def update_last_seen(self):
         """Update the last seen timestamp"""
-        self.last_seen = datetime.now().isoformat()
+        self.last_seen = datetime.now(timezone.utc).isoformat()
 
     def set_sleep_time(self, sleep_time: int):
         """Update the agent's sleep time"""

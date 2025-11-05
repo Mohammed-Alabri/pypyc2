@@ -249,6 +249,8 @@ export async function downloadFile(agentDir: string, filename: string): Promise<
 
 // Utility functions
 export function getAgentStatus(lastSeen: string, sleepTime: number = 3): 'online' | 'offline' {
+  // Ensure we parse the timestamp as UTC
+  // Backend now sends UTC timestamps with timezone info (e.g., "2025-11-05T09:03:35.636072+00:00")
   const lastSeenDate = new Date(lastSeen);
   const now = new Date();
   const diffSeconds = (now.getTime() - lastSeenDate.getTime()) / 1000;

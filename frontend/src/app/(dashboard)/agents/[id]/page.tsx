@@ -95,12 +95,27 @@ export default function AgentDetailPage() {
 
   const handleCopy = async (text: string, itemId: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedItem(itemId);
-      setTimeout(() => setCopiedItem(null), 2000);
+      // Check if clipboard API is available (requires HTTPS or localhost)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        setCopiedItem(itemId);
+        setTimeout(() => setCopiedItem(null), 2000);
+      } else {
+        // Fallback for HTTP contexts or older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopiedItem(itemId);
+        setTimeout(() => setCopiedItem(null), 2000);
+      }
     } catch (error) {
       console.error('Failed to copy:', error);
-      // Fallback for older browsers
+      // Try fallback one more time in case the first attempt failed
       try {
         const textArea = document.createElement('textarea');
         textArea.value = text;
