@@ -1,6 +1,5 @@
 import requests as rq
 from sys import argv
-from functions import *
 import time
 import os
 from pathlib import Path
