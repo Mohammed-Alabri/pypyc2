@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   getAgent,
@@ -48,19 +48,7 @@ export default function AgentDetailPage() {
   const [newSleepTime, setNewSleepTime] = useState<string>('3');
   const [isChangingSleepTime, setIsChangingSleepTime] = useState(false);
 
-  useEffect(() => {
-    if (!agentId || isNaN(agentId)) {
-      router.push('/agents');
-      return;
-    }
-
-    fetchAgent();
-    const interval = setInterval(fetchAgent, 5000); // Refresh every 5 seconds
-
-    return () => clearInterval(interval);
-  }, [agentId, isDeleting]);
-
-  const fetchAgent = async () => {
+  const fetchAgent = useCallback(async () => {
     // Don't fetch if we're in the process of deleting
     if (isDeleting) {
       return;
@@ -74,7 +62,19 @@ export default function AgentDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [agentId, isDeleting]);
+
+  useEffect(() => {
+    if (!agentId || isNaN(agentId)) {
+      router.push('/agents');
+      return;
+    }
+
+    fetchAgent();
+    const interval = setInterval(fetchAgent, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [agentId, fetchAgent, router]);
 
   const handleDownloadFile = async (filename: string) => {
     try {

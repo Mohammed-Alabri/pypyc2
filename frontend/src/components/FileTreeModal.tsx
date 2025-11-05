@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, Folder, File, ChevronRight, ChevronDown, Loader2, HardDrive } from 'lucide-react';
 import { listDirectory } from '@/lib/api';
 
@@ -138,13 +138,7 @@ export default function FileTreeModal({ agentId, agentSleepTime = 3, isOpen, onC
   const [error, setError] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      loadRoots();
-    }
-  }, [isOpen, agentId]);
-
-  const loadRoots = async () => {
+  const loadRoots = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -161,7 +155,7 @@ export default function FileTreeModal({ agentId, agentSleepTime = 3, isOpen, onC
         return;
       }
       throw new Error('Invalid response from directory listing');
-    } catch (err) {
+    } catch (_err) {
       // If C:\ fails, try root / for Unix-like systems
       try {
         const items = await listDirectory(agentId, '/', agentSleepTime);
@@ -176,14 +170,20 @@ export default function FileTreeModal({ agentId, agentSleepTime = 3, isOpen, onC
           return;
         }
         throw new Error('Invalid response from directory listing');
-      } catch (err2) {
+      } catch (_err2) {
         setError('Failed to load file system. Make sure the agent is online.');
-        console.error('Error loading roots:', err2);
+        console.error('Error loading roots:', _err2);
       }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [agentId, agentSleepTime]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadRoots();
+    }
+  }, [isOpen, loadRoots]);
 
   const handleSelectFile = (path: string) => {
     setSelectedPath(path);

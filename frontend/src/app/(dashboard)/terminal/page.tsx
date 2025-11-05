@@ -23,7 +23,6 @@ function TerminalContent() {
   const [commandHistory, setCommandHistory] = useState<CommandResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [initializedAgentId, setInitializedAgentId] = useState<number | null>(null);
-  const [followOutput, setFollowOutput] = useState(true);
   // Memoized deduplicated history for stable array reference
   const deduplicatedHistory = useMemo(() => {
     const seen = new Set<number>();

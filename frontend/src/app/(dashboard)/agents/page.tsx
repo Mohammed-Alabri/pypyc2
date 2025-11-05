@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { getAgents, getAgentStatus, formatDate } from '@/lib/api';
 import { Agent } from '@/types/agent';
 import Link from 'next/link';
-import { ArrowRight, Info, Terminal } from 'lucide-react';
+import { Info, Terminal } from 'lucide-react';
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);

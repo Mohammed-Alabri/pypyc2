@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   getAgents,
   listAgentFiles,
@@ -46,13 +46,7 @@ export default function FilesPage() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (selectedAgent) {
-      fetchFiles();
-    }
-  }, [selectedAgent]);
-
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     if (!selectedAgent) return;
 
     setLoading(true);
@@ -65,7 +59,13 @@ export default function FilesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedAgent]);
+
+  useEffect(() => {
+    if (selectedAgent) {
+      fetchFiles();
+    }
+  }, [selectedAgent, fetchFiles]);
 
   const handleUploadFileToServer = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedAgent || !e.target.files || e.target.files.length === 0) return;

@@ -24,7 +24,6 @@ export function AgentNode({ agent, x, y, onMouseDown, isDragging, canvasWidth, c
 
   // Smart tooltip positioning based on agent location
   const isTopHalf = y < canvasHeight / 2;
-  const isLeftHalf = x < canvasWidth / 2;
 
   // Calculate tooltip position to keep it within canvas bounds
   const tooltipWidth = 160;
