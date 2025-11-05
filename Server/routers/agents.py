@@ -5,7 +5,7 @@ Handles agent listing, details, and deletion operations
 
 import shutil
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict
 from fastapi import APIRouter, HTTPException, Depends
 
@@ -59,7 +59,7 @@ def delete_agent(agent_id: int, user: Dict = Depends(get_current_user)):
 
     # Check if agent is online (last seen within 15 seconds)
     last_seen = datetime.fromisoformat(ag.last_seen)
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     diff_seconds = (now - last_seen).total_seconds()
     is_online = diff_seconds < 15
 
