@@ -3,7 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from '@/components/Sidebar';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function DashboardLayout({
   children,
@@ -12,15 +12,17 @@ export default function DashboardLayout({
 }) {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
+      setIsRedirecting(true);
       router.push('/login');
     }
   }, [isAuthenticated, isLoading, router]);
 
-  // Show loading state while checking authentication
-  if (isLoading) {
+  // Show loading state while checking authentication or redirecting
+  if (isLoading || isRedirecting) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-950">
         <div className="text-white">Loading...</div>
@@ -30,7 +32,11 @@ export default function DashboardLayout({
 
   // Don't render dashboard if not authenticated
   if (!isAuthenticated) {
-    return null;
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-950">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
   }
 
   return (
