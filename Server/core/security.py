@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 import bcrypt
 
@@ -57,7 +57,7 @@ def create_session(username: str) -> str:
     Returns the session token
     """
     token = generate_token()
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
 
     sessions[token] = {
         "username": username,
@@ -79,7 +79,7 @@ def validate_session(token: str) -> Optional[Dict]:
         return None
 
     session = sessions[token]
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
 
     # Check if session has expired
     time_since_activity = now - session["last_activity"]
@@ -111,7 +111,7 @@ def revoke_session(token: str) -> bool:
 
 def cleanup_expired_sessions():
     """Remove all expired sessions from storage"""
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     expired_tokens = [
         token for token, session in sessions.items()
         if now - session["last_activity"] > SESSION_TIMEOUT

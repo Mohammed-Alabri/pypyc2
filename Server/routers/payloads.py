@@ -67,7 +67,7 @@ def get_agent_payload():
     Serve the agent Python file for deployment
     This is the all-in-one agent with all dependencies in a single file
     """
-    agent_path = Path(__file__).parent.parent.parent / "Agent" / "allinone.py"
+    agent_path = Path(__file__).parent.parent.parent / "agent" / "allinone.py"
 
     if not agent_path.exists():
         raise HTTPException(status_code=404, detail="Agent file not found")

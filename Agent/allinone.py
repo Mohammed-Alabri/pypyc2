@@ -6,30 +6,39 @@ from pathlib import Path
 import subprocess
 
 # Global working directory state
-cwd = os.getcwd()
+CWD = os.getcwd()
 
 def execute_command(command: str):
-    global cwd
+    global CWD
 
     # Handle cd commands to maintain persistent directory state
     if command.strip().lower().startswith("cd "):
         path = command[3:].strip()
-        new_dir = os.path.abspath(os.path.expanduser(os.path.join(cwd, path)))
+        new_dir = os.path.abspath(os.path.expanduser(os.path.join(CWD, path)))
 
         if os.path.isdir(new_dir):
-            cwd = new_dir
-            return f"Changed directory to: {cwd}"
+            CWD = new_dir
+            return f"Changed directory to: {CWD}"
         else:
             return f"The system cannot find the path specified: {path}"
 
     # Execute all other commands in the current working directory
     res = subprocess.run(
         ["powershell", "-NoProfile", "-Command", command],
-        cwd=cwd,
+        cwd=CWD,
         capture_output=True,
         text=True
-    ).stdout.strip()
-    return res
+    )
+
+    # Combine stdout and stderr for complete output visibility
+    output = res.stdout.strip()
+    if res.stderr.strip():
+        if output:
+            output = res.stderr.strip() + "\n" + output
+        else:
+            output = res.stderr.strip()
+
+    return output
 
 
 def get_hostname():
