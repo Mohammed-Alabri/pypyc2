@@ -17,6 +17,51 @@ interface FileItem {
   path: string;
 }
 
+// localStorage keys
+const STORAGE_AGENT_DIRS = 'filemanager_agent_directories';
+const STORAGE_LAST_AGENT = 'filemanager_last_agent_id';
+
+// Helper functions for localStorage
+function getPerAgentDirectories(): Record<number, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = localStorage.getItem(STORAGE_AGENT_DIRS);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAgentDirectory(agentId: number, path: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const dirs = getPerAgentDirectories();
+    dirs[agentId] = path;
+    localStorage.setItem(STORAGE_AGENT_DIRS, JSON.stringify(dirs));
+  } catch {
+    // Silently fail if localStorage is unavailable
+  }
+}
+
+function getLastSelectedAgentId(): number | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = localStorage.getItem(STORAGE_LAST_AGENT);
+    return stored ? parseInt(stored, 10) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastSelectedAgentId(agentId: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_LAST_AGENT, agentId.toString());
+  } catch {
+    // Silently fail if localStorage is unavailable
+  }
+}
+
 export default function FileManagerPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -49,7 +94,10 @@ export default function FileManagerPage() {
       const data = await getAgents();
       setAgents(data);
       if (data.length > 0 && !selectedAgent) {
-        setSelectedAgent(data[0]);
+        // Try to restore last selected agent from localStorage
+        const lastAgentId = getLastSelectedAgentId();
+        const lastAgent = lastAgentId ? data.find(a => a.id === lastAgentId) : null;
+        setSelectedAgent(lastAgent || data[0]);
       }
     } catch {
       toast.error('Failed to load agents');
@@ -74,6 +122,28 @@ export default function FileManagerPage() {
   useEffect(() => {
     loadAgents();
   }, [loadAgents]);
+
+  // Restore directory when agent changes
+  useEffect(() => {
+    if (selectedAgent) {
+      const dirs = getPerAgentDirectories();
+      const savedPath = dirs[selectedAgent.id];
+      if (savedPath) {
+        setCurrentPath(savedPath);
+      } else {
+        setCurrentPath('C:\\');
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAgent?.id]); // Only run when agent ID changes
+
+  // Persist directory changes to localStorage
+  useEffect(() => {
+    if (selectedAgent && currentPath) {
+      saveAgentDirectory(selectedAgent.id, currentPath);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAgent?.id, currentPath]);
 
   useEffect(() => {
     if (selectedAgent) {
@@ -352,7 +422,12 @@ export default function FileManagerPage() {
             value={selectedAgent?.id || ''}
             onChange={(e) => {
               const agent = agents.find(a => a.id === parseInt(e.target.value));
-              setSelectedAgent(agent || null);
+              if (agent) {
+                saveLastSelectedAgentId(agent.id);
+                setSelectedAgent(agent);
+              } else {
+                setSelectedAgent(null);
+              }
             }}
             className="bg-gray-800 border border-gray-700 rounded px-3 py-2"
             disabled={agents.length === 0}
