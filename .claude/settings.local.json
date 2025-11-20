@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git -C \"C:\\Users\\MohdAbri\\github\\pypyc2\" log --oneline -10)"
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

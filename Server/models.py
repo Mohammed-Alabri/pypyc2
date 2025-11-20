@@ -25,3 +25,8 @@ class CommandResult(BaseModel):
 class AgentIntial(BaseModel):
     hostname: str
     user: str
+
+
+class WriteFileRequest(BaseModel):
+    path: str
+    content: str

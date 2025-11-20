@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from core.agent import Agent
 from config import agents, UPLOAD_DIR
 from dependencies import get_current_user
+from models import WriteFileRequest
 
 
 router = APIRouter(prefix="", tags=["commands"])
@@ -168,6 +169,83 @@ def create_set_sleep_time_command(agent_id: int, sleep_time: int, user: Dict = D
         'type': 'set_sleep_time',
         'status': 'queued',
         'message': f'Agent will change sleep time from {old_sleep_time}s to {sleep_time}s'
+    }
+
+
+@router.post("/command/{agent_id}/read_file")
+def create_read_file_command(agent_id: int, path: str, max_size: int = 10 * 1024 * 1024, user: Dict = Depends(get_current_user)):
+    """
+    Create a read_file command - agent will read file content for editing
+
+    Args:
+        agent_id: The agent ID
+        path: The file path to read
+        max_size: Maximum file size in bytes (default 10MB)
+    """
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    ag: Agent = agents[agent_id]
+    command_id = ag.add_command("read_file", {
+        "path": path,
+        "max_size": max_size
+    })
+    return {
+        'command_id': command_id,
+        'type': 'read_file',
+        'status': 'queued',
+        'message': f'Agent will read file: {path}'
+    }
+
+
+@router.post("/command/{agent_id}/write_file")
+def create_write_file_command(agent_id: int, request: WriteFileRequest, user: Dict = Depends(get_current_user)):
+    """
+    Create a write_file command - agent will write content to file
+
+    Args:
+        agent_id: The agent ID
+        request: WriteFileRequest with path and content
+    """
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    ag: Agent = agents[agent_id]
+    command_id = ag.add_command("write_file", {
+        "path": request.path,
+        "content": request.content
+    })
+    return {
+        'command_id': command_id,
+        'type': 'write_file',
+        'status': 'queued',
+        'message': f'Agent will save file: {request.path}'
+    }
+
+
+@router.post("/command/{agent_id}/delete")
+def create_delete_command(agent_id: int, path: str, recursive: bool = False, user: Dict = Depends(get_current_user)):
+    """
+    Create a delete command - agent will delete file or directory
+
+    Args:
+        agent_id: The agent ID
+        path: The path to delete
+        recursive: Whether to delete directories recursively (default False)
+    """
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    ag: Agent = agents[agent_id]
+    command_id = ag.add_command("delete", {
+        "path": path,
+        "recursive": recursive
+    })
+    return {
+        'command_id': command_id,
+        'type': 'delete',
+        'status': 'queued',
+        'message': f'Agent will delete: {path}'
     }
 
 

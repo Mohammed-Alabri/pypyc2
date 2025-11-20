@@ -277,3 +277,236 @@ export function formatDate(dateString: string): string {
 export async function getPayloadToken(): Promise<{ token: string; expires_in: number; lifetime: number }> {
   return apiCall<{ token: string; expires_in: number; lifetime: number }>('/api/payload-token');
 }
+
+// File Manager functions
+export async function readFile(
+  agentId: number,
+  path: string,
+  agentSleepTime: number = 3
+): Promise<{ content: string; encoding: string; size: number }> {
+  // Create read_file command
+  const params = new URLSearchParams({ path });
+  const response = await apiCall<{ command_id: number }>(`/command/${agentId}/read_file?${params.toString()}`, {
+    method: 'POST',
+  });
+
+  // Poll for result
+  const commandId = response.command_id;
+  let attempts = 0;
+  const maxAttempts = Math.max(30, Math.ceil((agentSleepTime * 3 + 10) / 0.5));
+
+  while (attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    attempts++;
+
+    try {
+      const result = await getCommandResult(agentId, commandId);
+
+      if (result.status === 'completed' && result.result) {
+        // Parse the JSON result which contains {content, encoding, size}
+        const parsed = JSON.parse(result.result);
+        return parsed;
+      } else if (result.status === 'failed') {
+        throw new Error(result.error || 'Failed to read file');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCommandNotReady = errorMessage.includes('404') ||
+                                 errorMessage.includes('not found') ||
+                                 errorMessage.includes('queued');
+
+      if (!isCommandNotReady || attempts >= maxAttempts) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Timeout waiting for file read (agent may be offline)');
+}
+
+export async function writeFile(
+  agentId: number,
+  path: string,
+  content: string,
+  agentSleepTime: number = 3
+): Promise<string> {
+  // Create write_file command
+  const response = await apiCall<{ command_id: number }>(`/command/${agentId}/write_file`, {
+    method: 'POST',
+    body: JSON.stringify({ path, content }),
+  });
+
+  // Poll for result
+  const commandId = response.command_id;
+  let attempts = 0;
+  const maxAttempts = Math.max(30, Math.ceil((agentSleepTime * 3 + 10) / 0.5));
+
+  while (attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    attempts++;
+
+    try {
+      const result = await getCommandResult(agentId, commandId);
+
+      if (result.status === 'completed' && result.result) {
+        return result.result; // Success message like "File saved: path (size bytes)"
+      } else if (result.status === 'failed') {
+        throw new Error(result.error || 'Failed to write file');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCommandNotReady = errorMessage.includes('404') ||
+                                 errorMessage.includes('not found') ||
+                                 errorMessage.includes('queued');
+
+      if (!isCommandNotReady || attempts >= maxAttempts) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Timeout waiting for file write (agent may be offline)');
+}
+
+export async function deleteFile(
+  agentId: number,
+  path: string,
+  recursive: boolean = false,
+  agentSleepTime: number = 3
+): Promise<string> {
+  // Create delete command
+  const params = new URLSearchParams({
+    path,
+    recursive: recursive.toString(),
+  });
+  const response = await apiCall<{ command_id: number }>(`/command/${agentId}/delete?${params.toString()}`, {
+    method: 'POST',
+  });
+
+  // Poll for result
+  const commandId = response.command_id;
+  let attempts = 0;
+  const maxAttempts = Math.max(20, Math.ceil((agentSleepTime * 3 + 10) / 0.5));
+
+  while (attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    attempts++;
+
+    try {
+      const result = await getCommandResult(agentId, commandId);
+
+      if (result.status === 'completed' && result.result) {
+        return result.result; // Success message like "File deleted: path"
+      } else if (result.status === 'failed') {
+        throw new Error(result.error || 'Failed to delete file');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCommandNotReady = errorMessage.includes('404') ||
+                                 errorMessage.includes('not found') ||
+                                 errorMessage.includes('queued');
+
+      if (!isCommandNotReady || attempts >= maxAttempts) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Timeout waiting for file delete (agent may be offline)');
+}
+
+// Request file from agent to server (upload from agent)
+export async function requestFileFromAgent(
+  agentId: number,
+  sourcePath: string,
+  filename?: string,
+  agentSleepTime: number = 3
+): Promise<string> {
+  const params = new URLSearchParams({ source_path: sourcePath });
+  if (filename) {
+    params.append('filename', filename);
+  }
+
+  const response = await apiCall<{ command_id: number }>(`/command/${agentId}/upload?${params.toString()}`, {
+    method: 'POST',
+  });
+
+  // Poll for result
+  const commandId = response.command_id;
+  let attempts = 0;
+  const maxAttempts = Math.max(40, Math.ceil((agentSleepTime * 3 + 20) / 0.5));
+
+  while (attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    attempts++;
+
+    try {
+      const result = await getCommandResult(agentId, commandId);
+
+      if (result.status === 'completed' && result.result) {
+        return result.result; // Success message
+      } else if (result.status === 'failed') {
+        throw new Error(result.error || 'Failed to upload file from agent');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCommandNotReady = errorMessage.includes('404') ||
+                                 errorMessage.includes('not found') ||
+                                 errorMessage.includes('queued');
+
+      if (!isCommandNotReady || attempts >= maxAttempts) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Timeout waiting for file upload (agent may be offline)');
+}
+
+// Download file from server to agent (push file to agent)
+export async function downloadFileToAgent(
+  agentId: number,
+  filename: string,
+  saveAs: string,
+  agentSleepTime: number = 3
+): Promise<string> {
+  const params = new URLSearchParams({ filename });
+  if (saveAs) {
+    params.append('save_as', saveAs);
+  }
+
+  const response = await apiCall<{ command_id: number }>(`/command/${agentId}/download?${params.toString()}`, {
+    method: 'POST',
+  });
+
+  // Poll for result
+  const commandId = response.command_id;
+  let attempts = 0;
+  const maxAttempts = Math.max(40, Math.ceil((agentSleepTime * 3 + 20) / 0.5));
+
+  while (attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    attempts++;
+
+    try {
+      const result = await getCommandResult(agentId, commandId);
+
+      if (result.status === 'completed' && result.result) {
+        return result.result; // Success message
+      } else if (result.status === 'failed') {
+        throw new Error(result.error || 'Failed to download file to agent');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCommandNotReady = errorMessage.includes('404') ||
+                                 errorMessage.includes('not found') ||
+                                 errorMessage.includes('queued');
+
+      if (!isCommandNotReady || attempts >= maxAttempts) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Timeout waiting for file download to agent (agent may be offline)');
+}
