@@ -4,31 +4,26 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   getAgents,
   listAgentFiles,
-  uploadFileForAgent,
   downloadFile,
-  createUploadCommand,
-  createDownloadCommand,
   formatBytes,
 } from '@/lib/api';
 import { Agent, FileInfo } from '@/types/agent';
 import {
-  Upload,
   Download,
   File,
   Folder,
-  ArrowUpFromLine,
-  ArrowDownToLine,
   Loader2,
+  Trash2,
 } from 'lucide-react';
-import FileTreeModal from '@/components/FileTreeModal';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function FilesPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [uploadLoading, setUploadLoading] = useState(false);
-  const [isFileTreeModalOpen, setIsFileTreeModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<FileInfo | null>(null);
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -67,57 +62,40 @@ export default function FilesPage() {
     }
   }, [selectedAgent, fetchFiles]);
 
-  const handleUploadFileToServer = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!selectedAgent || !e.target.files || e.target.files.length === 0) return;
+  const handleDeleteFile = async (file: FileInfo) => {
+    setFileToDelete(file);
+    setDeleteConfirmOpen(true);
+  };
 
-    const file = e.target.files[0];
-    setUploadLoading(true);
+  const confirmDelete = async () => {
+    if (!selectedAgent || !fileToDelete) return;
+
+    setDeleteConfirmOpen(false);
+    const toastId = toast.loading('Deleting file from server...');
 
     try {
-      await uploadFileForAgent(selectedAgent, file);
-      alert(`File "${file.name}" uploaded successfully!`);
-      fetchFiles();
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/dashboard/files/${selectedAgent}/${fileToDelete.filename}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete file');
+      }
+
+      toast.success('File deleted successfully', { id: toastId });
+      fetchFiles(); // Refresh file list
     } catch (error) {
-      console.error('Failed to upload file:', error);
-      alert(`Failed to upload file: ${error}`);
+      console.error('Failed to delete file:', error);
+      toast.error('Failed to delete file', { id: toastId });
     } finally {
-      setUploadLoading(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleRequestFileFromAgent = () => {
-    if (!selectedAgent) return;
-    setIsFileTreeModalOpen(true);
-  };
-
-  const handleFileSelected = async (path: string) => {
-    if (!selectedAgent) return;
-
-    try {
-      const response = await createUploadCommand(selectedAgent, path) as { message?: string };
-      alert(response.message || 'Upload command sent to agent');
-    } catch (error) {
-      console.error('Failed to create upload command:', error);
-      alert(`Failed: ${error}`);
-    }
-  };
-
-  const handleSendFileToAgent = async (filename: string) => {
-    if (!selectedAgent) return;
-
-    const savePath = prompt(
-      'Enter the path where the agent should save the file:',
-      filename
-    );
-    if (!savePath) return;
-
-    try {
-      const response = await createDownloadCommand(selectedAgent, filename, savePath) as { message?: string };
-      alert(response.message || 'Download command sent to agent');
-    } catch (error) {
-      console.error('Failed to create download command:', error);
-      alert(`Failed: ${error}`);
+      setFileToDelete(null);
     }
   };
 
@@ -142,7 +120,9 @@ export default function FilesPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold mb-6">File Manager</h1>
+      <Toaster position="bottom-right" />
+      <h1 className="text-3xl font-bold mb-6">Downloads</h1>
+      <p className="text-gray-400 mb-6">Files downloaded from agents to the server</p>
 
       <div className="flex gap-6">
         {/* Agent Selector */}
@@ -178,30 +158,14 @@ export default function FilesPage() {
             </div>
           ) : (
             <>
-              {/* Actions */}
-              <div className="flex items-center justify-between mb-6">
+              {/* Header */}
+              <div className="mb-6">
                 <h2 className="text-xl font-semibold">
-                  Files for Agent {selectedAgent}
+                  Downloads from Agent {selectedAgent}
                 </h2>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleRequestFileFromAgent}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-                  >
-                    <ArrowUpFromLine className="w-4 h-4" />
-                    Request from Agent
-                  </button>
-                  <label className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors cursor-pointer">
-                    <Upload className="w-4 h-4" />
-                    {uploadLoading ? 'Uploading...' : 'Upload to Server'}
-                    <input
-                      type="file"
-                      onChange={handleUploadFileToServer}
-                      className="hidden"
-                      disabled={uploadLoading}
-                    />
-                  </label>
-                </div>
+                <p className="text-sm text-gray-400 mt-1">
+                  Download files to your PC or delete them from server storage
+                </p>
               </div>
 
               {/* File List */}
@@ -213,9 +177,9 @@ export default function FilesPage() {
               ) : files.length === 0 ? (
                 <div className="text-center text-gray-400 py-12">
                   <File className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p>No files found for this agent</p>
+                  <p>No files downloaded from this agent yet</p>
                   <p className="text-sm mt-2">
-                    Upload files or request them from the agent
+                    Use File Manager to download files from the agent
                   </p>
                 </div>
               ) : (
@@ -241,15 +205,15 @@ export default function FilesPage() {
                           title="Download to your computer"
                         >
                           <Download className="w-4 h-4" />
-                          Download
+                          Download to PC
                         </button>
                         <button
-                          onClick={() => handleSendFileToAgent(file.filename)}
-                          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm transition-colors"
-                          title="Send to agent"
+                          onClick={() => handleDeleteFile(file)}
+                          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm transition-colors"
+                          title="Delete from server"
                         >
-                          <ArrowDownToLine className="w-4 h-4" />
-                          Send to Agent
+                          <Trash2 className="w-4 h-4" />
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -261,15 +225,46 @@ export default function FilesPage() {
         </div>
       </div>
 
-      {/* File Tree Modal */}
-      {selectedAgent && (
-        <FileTreeModal
-          agentId={selectedAgent}
-          agentSleepTime={agents.find(a => a.id === selectedAgent)?.sleep_time ?? 3}
-          isOpen={isFileTreeModalOpen}
-          onClose={() => setIsFileTreeModalOpen(false)}
-          onSelectFile={handleFileSelected}
-        />
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmOpen && fileToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-400" />
+              Confirm Deletion
+            </h3>
+            <p className="mb-4 text-gray-300">
+              Are you sure you want to delete this file from the server?
+            </p>
+            <p className="font-medium mb-2 text-white">
+              {fileToDelete.filename}
+            </p>
+            <p className="text-sm text-gray-400 mb-6">
+              Size: {formatBytes(fileToDelete.size)}
+            </p>
+            <p className="text-yellow-400 text-sm mb-6 flex items-center gap-2">
+              ⚠️ This action cannot be undone!
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setDeleteConfirmOpen(false);
+                  setFileToDelete(null);
+                }}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded transition-colors flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

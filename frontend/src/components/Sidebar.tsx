@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, Terminal, FolderOpen, Target, LogOut, FolderTree } from 'lucide-react';
+import { Home, Users, Terminal, Download, Target, LogOut, FolderTree } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -11,7 +11,7 @@ const navigation = [
   { name: 'Agents', href: '/agents', icon: Users },
   { name: 'Terminal', href: '/terminal', icon: Terminal },
   { name: 'File Manager', href: '/filemanager', icon: FolderTree },
-  { name: 'Files', href: '/files', icon: FolderOpen },
+  { name: 'Downloads', href: '/files', icon: Download },
   { name: 'Payloads', href: '/payloads', icon: Target },
 ];
 
