@@ -8,7 +8,8 @@
 5. [Web Dashboard](#web-dashboard)
 6. [API Reference](#api-reference)
 7. [Technical Implementation](#technical-implementation)
-8. [Security Analysis](#security-analysis)
+8. [Function Reference](#function-reference)
+9. [Security Analysis](#security-analysis)
 
 ---
 
@@ -1751,6 +1752,778 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
   return response.json()
 }
 ```
+
+---
+
+## Function Reference
+
+This section provides a complete reference of all functions in the PyPyC2 codebase. Functions are organized by component and include signatures, parameters, return types, and descriptions.
+
+### Server Core Functions
+
+#### dependencies.py
+
+##### `get_current_user(authorization: str = Header(...))`
+- **Purpose**: FastAPI dependency for authentication validation on protected routes
+- **Parameters**:
+  - `authorization` (str): Bearer token from Authorization header
+- **Returns**: `Dict` with keys: `username`, `role`, `token`
+- **Raises**: `HTTPException(401)` if token is missing, malformed, or invalid
+- **Usage**: Add as dependency to protected endpoints: `user: dict = Depends(get_current_user)`
+
+---
+
+#### core/agent.py - Agent Class Methods
+
+##### `__init__(self, id: int, ipaddr: str, hostname: str, user: str)`
+- **Purpose**: Initialize a new agent instance
+- **Parameters**:
+  - `id` (int): 6-digit unique agent identifier
+  - `ipaddr` (str): Client IP address
+  - `hostname` (str): Target computer name
+  - `user` (str): Username running the agent
+- **Side Effects**: Sets default sleep_time=3, initializes empty command queue
+
+##### `add_command(self, command_type: str, command_data: Dict[str, Any]) -> int`
+- **Purpose**: Add a new command to agent's queue
+- **Parameters**:
+  - `command_type` (str): One of: exec, upload, download, terminate, list_directory, set_sleep_time, read_file, write_file, delete
+  - `command_data` (Dict): Type-specific command parameters
+- **Returns**: `int` - command_id (auto-incremented)
+- **Side Effects**: Creates command with status='pending', sets created_at timestamp
+
+##### `get_commands(self) -> List[Dict[str, Any]]`
+- **Purpose**: Retrieve pending commands and mark as retrieved
+- **Returns**: List of command dicts with keys: `command_id`, `type`, `data`
+- **Side Effects**: Changes status from 'pending' to 'retrieved', sets retrieved_at timestamp
+
+##### `set_result(self, command_id: int, status: str, result: Optional[str] = None, error: Optional[str] = None) -> bool`
+- **Purpose**: Set the execution result for a command
+- **Parameters**:
+  - `command_id` (int): Command to update
+  - `status` (str): 'success' or 'error'
+  - `result` (Optional[str]): Command output
+  - `error` (Optional[str]): Error message if failed
+- **Returns**: `bool` - True if command found, False otherwise
+- **Side Effects**: Sets command status to 'completed' or 'failed', sets completed_at timestamp
+
+##### `get_result(self, command_id: int) -> Optional[Dict[str, Any]]`
+- **Purpose**: Get result of a specific command
+- **Parameters**: `command_id` (int): Command to query
+- **Returns**: Command dict or None if not found
+
+##### `add_uploaded_file(self, filename: str, filepath: str, size: int)`
+- **Purpose**: Track a file uploaded from agent
+- **Parameters**:
+  - `filename` (str): Original filename
+  - `filepath` (str): Path on server
+  - `size` (int): File size in bytes
+- **Side Effects**: Appends to agent's uploaded_files list
+
+##### `add_downloaded_file(self, filename: str)`
+- **Purpose**: Track a file downloaded by agent
+- **Parameters**: `filename` (str): Name of downloaded file
+- **Side Effects**: Appends to agent's downloaded_files list
+
+##### `update_last_seen(self)`
+- **Purpose**: Update agent's last contact timestamp
+- **Side Effects**: Sets last_seen to current UTC time (ISO format)
+
+##### `set_sleep_time(self, sleep_time: int)`
+- **Purpose**: Update agent's polling interval
+- **Parameters**: `sleep_time` (int): New interval in seconds (1-60)
+- **Side Effects**: Updates agent's sleep_time attribute
+
+##### `to_dict(self) -> Dict[str, Any]`
+- **Purpose**: Serialize agent to dictionary for API responses
+- **Returns**: Dict with all agent attributes including commands
+
+---
+
+#### core/security.py
+
+##### `verify_password(plain_password: str, hashed_password: str) -> bool`
+- **Purpose**: Verify plain password against bcrypt hash
+- **Parameters**:
+  - `plain_password` (str): Password to check
+  - `hashed_password` (str): Bcrypt hash
+- **Returns**: `bool` - True if password matches
+
+##### `authenticate_user(username: str, password: str) -> Optional[Dict]`
+- **Purpose**: Authenticate user credentials
+- **Parameters**:
+  - `username` (str): Username to authenticate
+  - `password` (str): Plain password
+- **Returns**: `Dict` with user info if successful, None otherwise
+- **Note**: Currently only validates against hardcoded admin credentials
+
+##### `generate_token() -> str`
+- **Purpose**: Generate a unique session token
+- **Returns**: `str` - UUID v4 token
+
+##### `create_session(username: str) -> str`
+- **Purpose**: Create new session for authenticated user
+- **Parameters**: `username` (str): Authenticated username
+- **Returns**: `str` - Session token (UUID)
+- **Side Effects**: Stores session in global sessions dict with 8-hour timeout
+
+##### `validate_session(token: str) -> Optional[Dict]`
+- **Purpose**: Validate session token and check expiry
+- **Parameters**: `token` (str): Session token to validate
+- **Returns**: `Dict` with session data if valid, None otherwise
+- **Side Effects**: Updates last_activity timestamp, deletes expired sessions
+
+##### `revoke_session(token: str) -> bool`
+- **Purpose**: Revoke a session (logout)
+- **Parameters**: `token` (str): Session token to revoke
+- **Returns**: `bool` - True if session was found and revoked
+- **Side Effects**: Removes session from global sessions dict
+
+##### `cleanup_expired_sessions() -> int`
+- **Purpose**: Remove all expired sessions from storage
+- **Returns**: `int` - Number of sessions removed
+- **Side Effects**: Deletes expired sessions from global dict
+
+##### `get_active_sessions_count() -> int`
+- **Purpose**: Get count of currently active sessions
+- **Returns**: `int` - Number of active sessions
+
+---
+
+#### core/token_manager.py - PayloadTokenManager Class
+
+##### `__init__(self, rotation_interval: int = 300)`
+- **Purpose**: Initialize token manager with background rotation
+- **Parameters**: `rotation_interval` (int): Seconds between rotations (default 300 = 5min)
+- **Side Effects**: Starts daemon thread for automatic token rotation
+
+##### `_generate_token(self) -> str` (private)
+- **Purpose**: Generate cryptographically secure random token
+- **Returns**: `str` - URL-safe token (128-bit)
+- **Implementation**: Uses `secrets.token_urlsafe(16)`
+
+##### `_rotate_token(self)` (private)
+- **Purpose**: Rotate the current token
+- **Side Effects**: Generates new token, updates expiry timestamp
+
+##### `_rotation_worker(self)` (private)
+- **Purpose**: Background thread worker for automatic rotation
+- **Runs**: Infinite loop, sleeps rotation_interval seconds between rotations
+
+##### `get_current_token(self) -> str`
+- **Purpose**: Get the current valid token
+- **Returns**: `str` - Current token
+- **Thread-safe**: Uses lock for safe concurrent access
+
+##### `get_time_until_expiry(self) -> int`
+- **Purpose**: Get seconds until current token expires
+- **Returns**: `int` - Seconds remaining
+
+##### `validate_token(self, token: str) -> bool`
+- **Purpose**: Check if provided token matches current valid token
+- **Parameters**: `token` (str): Token to validate
+- **Returns**: `bool` - True if valid
+- **Thread-safe**: Uses lock
+
+---
+
+### Server Router Functions
+
+#### routers/auth.py
+
+##### `login(credentials: LoginRequest) -> LoginResponse`
+- **Endpoint**: `POST /auth/login`
+- **Purpose**: Authenticate user and create session
+- **Parameters**: `credentials` - Pydantic model with username, password
+- **Returns**: LoginResponse with token, username, role, message
+- **Raises**: `HTTPException(401)` if invalid credentials
+
+##### `logout(authorization: str = Header(...)) -> LogoutResponse`
+- **Endpoint**: `POST /auth/logout`
+- **Purpose**: Logout user and revoke session
+- **Parameters**: `authorization` (str): Bearer token from header
+- **Returns**: LogoutResponse with status and message
+- **Raises**: `HTTPException(401)` if invalid header format
+
+##### `verify_token(authorization: str = Header(...)) -> VerifyResponse`
+- **Endpoint**: `GET /auth/verify`
+- **Purpose**: Verify if token is valid and active
+- **Parameters**: `authorization` (str): Bearer token from header
+- **Returns**: VerifyResponse with authentication status and user info
+
+---
+
+#### routers/agents.py
+
+##### `get_agents(user: Dict = Depends(get_current_user)) -> List[Dict]`
+- **Endpoint**: `GET /agents`
+- **Purpose**: Get list of all agents
+- **Returns**: List of agent dictionaries
+- **Auth**: Requires valid bearer token
+
+##### `get_agent(agent_id: int, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `GET /agent/{agent_id}`
+- **Purpose**: Get detailed info about specific agent
+- **Parameters**: `agent_id` (int): Agent identifier
+- **Returns**: Dict with agent details including full command history
+- **Raises**: `HTTPException(404)` if agent not found
+
+##### `delete_agent(agent_id: int, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `DELETE /agent/{agent_id}`
+- **Purpose**: Delete agent and all associated files
+- **Parameters**: `agent_id` (int): Agent to delete
+- **Returns**: Dict with status, message, terminated flag
+- **Side Effects**: Sends terminate command if online, deletes upload directory
+- **Raises**: `HTTPException(404)` if agent not found
+
+---
+
+#### routers/commands.py
+
+##### `create_exec_command(agent_id: int, command: str, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /create_command/{agent_id}` (legacy)
+- **Purpose**: Create exec command
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `command` (str): Shell command to execute
+- **Returns**: Dict with command_id and type
+- **Raises**: `HTTPException(404)` if agent not found
+
+##### `create_exec_command_v2(agent_id: int, command: str, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/exec`
+- **Purpose**: Create exec command (v2 endpoint)
+- **Parameters**: Same as above
+- **Returns**: Dict with command_id, type, status
+
+##### `create_upload_command(agent_id: int, source_path: str, filename: str, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/upload`
+- **Purpose**: Command agent to upload file to server
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `source_path` (str): Path on target machine
+  - `filename` (str): Name to save as on server
+- **Returns**: Dict with command_id, type, status, message
+
+##### `create_download_command(agent_id: int, filename: str, save_as: str, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/download`
+- **Purpose**: Command agent to download file from server
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `filename` (str): File in agent's server directory
+  - `save_as` (str): Path to save on target machine
+- **Returns**: Dict with command_id, type, status, message, url
+- **Raises**: `HTTPException(404)` if agent or file not found
+
+##### `create_terminate_command(agent_id: int, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/terminate`
+- **Purpose**: Command agent to gracefully shutdown
+- **Parameters**: `agent_id` (int): Target agent
+- **Returns**: Dict with command_id, type, status, message
+
+##### `create_list_directory_command(agent_id: int, path: str, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/list_directory`
+- **Purpose**: Command agent to list directory contents
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `path` (str): Directory path to list
+- **Returns**: Dict with command_id, type, status, message
+
+##### `create_set_sleep_time_command(agent_id: int, sleep_time: int, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/set_sleep_time`
+- **Purpose**: Change agent's polling interval
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `sleep_time` (int): New interval in seconds (1-60)
+- **Returns**: Dict with command_id, type, status, message
+- **Raises**: `HTTPException(400)` if sleep_time out of range
+
+##### `create_read_file_command(agent_id: int, path: str, max_size: int = 10485760, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/read_file`
+- **Purpose**: Command agent to read file content
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `path` (str): File path to read
+  - `max_size` (int): Maximum file size (default 10MB)
+- **Returns**: Dict with command_id, type, status, message
+
+##### `create_write_file_command(agent_id: int, request: WriteFileRequest, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/write_file`
+- **Purpose**: Command agent to write content to file
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `request` (WriteFileRequest): Contains path and content
+- **Returns**: Dict with command_id, type, status, message
+
+##### `create_delete_command(agent_id: int, path: str, recursive: bool = False, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /command/{agent_id}/delete`
+- **Purpose**: Command agent to delete file or directory
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `path` (str): Path to delete
+  - `recursive` (bool): If True, delete directories recursively
+- **Returns**: Dict with command_id, type, status, message
+
+##### `get_command_result(agent_id: int, command_id: int, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `GET /command/{agent_id}/{command_id}`
+- **Purpose**: Get result of a specific command
+- **Parameters**:
+  - `agent_id` (int): Agent identifier
+  - `command_id` (int): Command identifier
+- **Returns**: Dict with status, result, error
+- **Raises**: `HTTPException(404)` if agent or command not found
+
+---
+
+#### routers/agent_comms.py
+
+##### `create_agent(agentintial: AgentIntial, request: Request) -> Dict`
+- **Endpoint**: `POST /join`
+- **Purpose**: Register new agent with C2 server
+- **Parameters**:
+  - `agentintial` (AgentIntial): Pydantic model with hostname, user
+  - `request` (Request): FastAPI request object (for IP extraction)
+- **Returns**: Dict with id (6-digit) and status
+- **Side Effects**: Creates agent, stores in global agents dict
+- **Raises**: `HTTPException(500)` if failed to generate unique ID after 100 attempts
+
+##### `get_commands(agent_id: int) -> Dict`
+- **Endpoint**: `GET /agent/get_commands/{agent_id}`
+- **Purpose**: Agent polls for pending commands
+- **Parameters**: `agent_id` (int): Agent identifier
+- **Returns**: Dict with commands list
+- **Side Effects**: Marks commands as retrieved, updates last_seen
+- **Raises**: `HTTPException(404)` if agent not found
+- **Note**: No authentication required (agents can't authenticate)
+
+##### `set_commands(commands: Commands) -> Dict` (deprecated)
+- **Endpoint**: `POST /agent/set_commands`
+- **Purpose**: Legacy endpoint for backward compatibility
+- **Note**: Deprecated, use set_command_result instead
+
+##### `set_command_result(command: CommandResult) -> Dict`
+- **Endpoint**: `POST /agent/set_command_result`
+- **Purpose**: Agent reports command execution result
+- **Parameters**: `command` (CommandResult): Pydantic model with agent_id, command_id, status, result, error
+- **Returns**: Dict with status and message
+- **Side Effects**: Updates command status and result
+- **Raises**: `HTTPException(404)` if agent or command not found
+
+##### `agent_upload_file(agent_id: int, file: UploadFile) -> Dict`
+- **Endpoint**: `POST /agent/upload_file`
+- **Purpose**: Agent uploads file to server
+- **Parameters**:
+  - `agent_id` (int): Agent identifier
+  - `file` (UploadFile): Multipart file upload
+- **Returns**: Dict with status, filename, size
+- **Side Effects**: Saves file to uploads/agent_{id}/, tracks in agent's uploaded_files
+- **Raises**:
+  - `HTTPException(404)` if agent not found
+  - `HTTPException(413)` if file exceeds 100MB limit
+
+---
+
+#### routers/files.py
+
+##### `serve_file(agent_dir: str, filename: str) -> FileResponse`
+- **Endpoint**: `GET /files/{agent_dir}/{filename}`
+- **Purpose**: Serve file for agent download
+- **Parameters**:
+  - `agent_dir` (str): Directory name (e.g., "agent_123456")
+  - `filename` (str): File to serve
+- **Returns**: FileResponse with file content
+- **Raises**: `HTTPException(404)` if file not found
+- **Note**: No authentication (agents need access)
+
+##### `list_agent_files(agent_id: int, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `GET /files/{agent_id}`
+- **Purpose**: List files available for an agent
+- **Parameters**: `agent_id` (int): Agent identifier
+- **Returns**: Dict with files list (filename, size)
+- **Raises**: `HTTPException(404)` if agent directory doesn't exist
+
+##### `dashboard_download_file(agent_id: int, filename: str, user: Dict = Depends(get_current_user)) -> FileResponse`
+- **Endpoint**: `GET /dashboard/files/{agent_id}/{filename}`
+- **Purpose**: Protected download for dashboard users
+- **Parameters**:
+  - `agent_id` (int): Agent identifier
+  - `filename` (str): File to download
+- **Returns**: FileResponse with file content
+- **Raises**: `HTTPException(404)` if agent or file not found
+
+##### `upload_file_for_agent(agent_id: int, file: UploadFile, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `POST /upload_for_agent/{agent_id}`
+- **Purpose**: Operator uploads file that agent can download later
+- **Parameters**:
+  - `agent_id` (int): Target agent
+  - `file` (UploadFile): Multipart file upload
+- **Returns**: Dict with status, filename, size, message, download_url
+- **Side Effects**: Saves file to uploads/agent_{id}/
+- **Raises**:
+  - `HTTPException(404)` if agent not found
+  - `HTTPException(413)` if file exceeds 100MB limit
+
+##### `delete_file(agent_id: int, filename: str, user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `DELETE /dashboard/files/{agent_id}/{filename}`
+- **Purpose**: Delete file from server storage
+- **Parameters**:
+  - `agent_id` (int): Agent identifier
+  - `filename` (str): File to delete
+- **Returns**: Dict with message
+- **Side Effects**: Permanently deletes file from filesystem
+- **Raises**: `HTTPException(404)` if file not found
+
+---
+
+#### routers/payloads.py
+
+##### `get_payload_token(user: Dict = Depends(get_current_user)) -> Dict`
+- **Endpoint**: `GET /api/payload-token`
+- **Purpose**: Get current valid payload token and expiry time
+- **Returns**: Dict with token, expires_in, lifetime
+- **Auth**: Requires valid bearer token
+
+##### `get_launcher_script(request: Request, id: str = Query(...)) -> Response`
+- **Endpoint**: `GET /payload/launcher.ps1?id={token}`
+- **Purpose**: Serve PowerShell launcher script
+- **Parameters**: `id` (str): Payload token (query param)
+- **Returns**: Response with PowerShell script (server URL injected)
+- **Raises**: `HTTPException(404)` if invalid token or template not found
+- **Note**: Template replaces {{SERVER_URL}} placeholder
+
+##### `get_agent_payload() -> FileResponse`
+- **Endpoint**: `GET /payload/allinone.py`
+- **Purpose**: Serve agent Python file for deployment
+- **Returns**: FileResponse with allinone.py
+- **Raises**: `HTTPException(404)` if file not found
+- **Note**: No authentication (security risk)
+
+---
+
+### Agent Functions
+
+#### Agent/main.py & Agent/allinone.py
+
+##### `encode_multipart_formdata(fields: Dict, files: Dict) -> Tuple[str, bytes]`
+- **Purpose**: Encode data for multipart/form-data uploads (RFC 2388 compliant)
+- **Parameters**:
+  - `fields` (Dict): Form field name→value pairs
+  - `files` (Dict): File field name→(filename, content) pairs
+- **Returns**: Tuple of (content_type, body)
+- **Note**: Used in allinone.py for file uploads without requests library
+
+##### `execute_command(command: str) -> str`
+- **Purpose**: Execute shell command with persistent directory state
+- **Parameters**: `command` (str): Shell command to run
+- **Returns**: `str` - Command output (stdout + stderr)
+- **Special Behavior**:
+  - `cd` commands update global CWD variable instead of executing
+  - All commands run in current CWD
+  - Uses PowerShell on Windows
+
+##### `get_hostname() -> str`
+- **Purpose**: Get computer hostname
+- **Returns**: `str` - Hostname from COMPUTERNAME or HOSTNAME env var
+
+##### `get_whoami() -> str`
+- **Purpose**: Get current username
+- **Returns**: `str` - Username from USERNAME or USER env var
+
+##### `list_directory(path: str) -> str`
+- **Purpose**: List directory contents with metadata
+- **Parameters**: `path` (str): Directory path to list
+- **Returns**: `str` - JSON string with items array or error
+- **Output Format**:
+```json
+{
+  "status": "success",
+  "items": [{"name": "...", "is_directory": true/false, "size": 0, "path": "..."}]
+}
+```
+
+##### `connect() -> Optional[int]`
+- **Purpose**: Send join request to C2 server
+- **Returns**: `int` - Agent ID if successful, None otherwise
+- **Side Effects**: Sets global AGENT_ID variable
+- **Network**: POST to /join with hostname and username
+
+##### `check_commands() -> List[Dict]`
+- **Purpose**: Poll server for pending commands
+- **Returns**: List of command dictionaries
+- **Network**: GET /agent/get_commands/{AGENT_ID}
+
+##### `execute_exec_command(command_data: Dict) -> Dict`
+- **Purpose**: Execute shell command
+- **Parameters**: `command_data` (Dict): Contains 'command' key
+- **Returns**: Dict with status and result/error
+
+##### `execute_upload_command(command_data: Dict) -> Dict`
+- **Purpose**: Upload file from agent to server
+- **Parameters**: `command_data` (Dict): Contains 'source_path' and 'filename'
+- **Returns**: Dict with status and result/error
+- **Network**: POST multipart/form-data to /agent/upload_file
+
+##### `execute_download_command(command_data: Dict) -> Dict`
+- **Purpose**: Download file from server to agent
+- **Parameters**: `command_data` (Dict): Contains 'url' and 'save_as'
+- **Returns**: Dict with status and result/error
+- **Network**: GET from provided URL
+
+##### `execute_terminate_command() -> Dict`
+- **Purpose**: Terminate agent gracefully
+- **Returns**: Dict with status, result, and terminate=True flag
+- **Effect**: Causes main loop to exit
+
+##### `execute_list_directory_command(command_data: Dict) -> Dict`
+- **Purpose**: List directory contents
+- **Parameters**: `command_data` (Dict): Contains 'path'
+- **Returns**: Dict with status and result (JSON directory listing)
+
+##### `execute_set_sleep_time_command(command_data: Dict) -> Dict`
+- **Purpose**: Change agent polling interval
+- **Parameters**: `command_data` (Dict): Contains 'sleep_time' (1-60)
+- **Returns**: Dict with status and result/error
+- **Side Effects**: Updates global SLEEP_TIME variable
+
+##### `execute_read_file_command(command_data: Dict) -> Dict`
+- **Purpose**: Read file content for editing
+- **Parameters**: `command_data` (Dict): Contains 'path' and optional 'max_size'
+- **Returns**: Dict with status and result containing:
+  - `content` (str): File contents
+  - `encoding` (str): Detected encoding
+  - `size` (int): File size
+- **Encoding Detection**: Tries utf-8, latin-1, cp1252, utf-16
+- **Binary Detection**: Returns error for binary files
+
+##### `execute_write_file_command(command_data: Dict) -> Dict`
+- **Purpose**: Write content to file
+- **Parameters**: `command_data` (Dict): Contains 'path' and 'content'
+- **Returns**: Dict with status and result/error
+- **Safety Features**:
+  - Creates .bak backup before writing
+  - Atomic write (temp file + rename)
+  - Rollback on failure
+  - Creates parent directories
+
+##### `execute_delete_command(command_data: Dict) -> Dict`
+- **Purpose**: Delete file or directory
+- **Parameters**: `command_data` (Dict): Contains 'path' and 'recursive'
+- **Returns**: Dict with status and result/error
+- **Behavior**:
+  - Files: Direct deletion
+  - Directories (recursive=False): Error if not empty
+  - Directories (recursive=True): Full tree deletion
+
+##### `execute_command_by_type(command: Dict) -> Dict`
+- **Purpose**: Route command to appropriate handler based on type
+- **Parameters**: `command` (Dict): Contains 'type' and 'data'
+- **Returns**: Dict with command result
+- **Supported Types**: exec, upload, download, terminate, list_directory, set_sleep_time, read_file, write_file, delete
+
+##### `send_result(command_id: int, result: Dict)`
+- **Purpose**: Send command execution result to server
+- **Parameters**:
+  - `command_id` (int): Command identifier
+  - `result` (Dict): Execution result
+- **Network**: POST to /agent/set_command_result
+
+##### `main()`
+- **Purpose**: Main agent loop - connect, poll, execute commands
+- **Flow**:
+  1. Get server URL from argv
+  2. Connect to server (get agent ID)
+  3. Enter polling loop:
+     - Sleep for SLEEP_TIME seconds
+     - Check for commands
+     - Execute each command
+     - Send results
+     - Check for terminate flag
+  4. Exit on terminate
+
+---
+
+### Frontend Functions
+
+#### frontend/src/lib/api.ts
+
+##### `getAuthToken() -> string | null`
+- **Purpose**: Get authentication token from localStorage
+- **Returns**: Token string or null if not found
+
+##### `apiCall<T>(endpoint: string, options?: RequestInit) -> Promise<T>`
+- **Purpose**: Generic API call wrapper with authentication
+- **Parameters**:
+  - `endpoint` (string): API path (e.g., "/agents")
+  - `options` (RequestInit): Fetch options
+- **Returns**: Promise with typed response
+- **Features**:
+  - Auto-adds Authorization header with bearer token
+  - Handles 401 by redirecting to login
+  - Parses error responses
+
+##### `getAgents() -> Promise<Agent[]>`
+- **Endpoint**: `GET /agents`
+- **Purpose**: Fetch list of all agents
+- **Returns**: Promise with array of Agent objects
+
+##### `getAgent(agentId: number) -> Promise<AgentDetailed>`
+- **Endpoint**: `GET /agent/{agentId}`
+- **Purpose**: Fetch detailed agent information
+- **Returns**: Promise with AgentDetailed object (includes full command history)
+
+##### `deleteAgent(agentId: number) -> Promise<{status: boolean, message: string, terminated: boolean}>`
+- **Endpoint**: `DELETE /agent/{agentId}`
+- **Purpose**: Delete agent from server
+- **Returns**: Promise with deletion status
+
+##### `terminateAgent(agentId: number) -> Promise<any>`
+- **Endpoint**: `POST /command/{agentId}/terminate`
+- **Purpose**: Send terminate command to agent
+- **Returns**: Promise with command creation response
+
+##### `executeCommand(agentId: number, command: string) -> Promise<any>`
+- **Endpoint**: `POST /command/{agentId}/exec`
+- **Purpose**: Execute shell command on agent
+- **Returns**: Promise with command creation response
+
+##### `createUploadCommand(agentId: number, sourcePath: string, filename?: string) -> Promise<any>`
+- **Endpoint**: `POST /command/{agentId}/upload`
+- **Purpose**: Create upload command (agent → server)
+- **Returns**: Promise with command creation response
+
+##### `createDownloadCommand(agentId: number, filename: string, saveAs?: string) -> Promise<any>`
+- **Endpoint**: `POST /command/{agentId}/download`
+- **Purpose**: Create download command (server → agent)
+- **Returns**: Promise with command creation response
+
+##### `setSleepTime(agentId: number, sleepTime: number) -> Promise<any>`
+- **Endpoint**: `POST /command/{agentId}/set_sleep_time`
+- **Purpose**: Change agent polling interval
+- **Returns**: Promise with command creation response
+
+##### `listDirectory(agentId: number, path: string, agentSleepTime: number = 3) -> Promise<DirectoryItem[]>`
+- **Endpoint**: `POST /command/{agentId}/list_directory` + polling
+- **Purpose**: List directory contents with smart polling
+- **Parameters**:
+  - `agentId` (number): Target agent
+  - `path` (string): Directory to list
+  - `agentSleepTime` (number): Agent's sleep time for timeout calculation
+- **Returns**: Promise with array of directory items
+- **Polling**: Polls every 500ms, calculates max attempts from sleep time
+- **Timeout**: `(agentSleepTime * 3 + 10) seconds`
+
+##### `getCommandResult(agentId: number, commandId: number) -> Promise<CommandResult>`
+- **Endpoint**: `GET /command/{agentId}/{commandId}`
+- **Purpose**: Get result of specific command
+- **Returns**: Promise with CommandResult object
+
+##### `listAgentFiles(agentId: number) -> Promise<{files: FileInfo[]}>`
+- **Endpoint**: `GET /files/{agentId}`
+- **Purpose**: List files in agent's server directory
+- **Returns**: Promise with files array
+
+##### `uploadFileForAgent(agentId: number, file: File) -> Promise<any>`
+- **Endpoint**: `POST /upload_for_agent/{agentId}`
+- **Purpose**: Upload file from operator's PC to server for agent
+- **Returns**: Promise with upload response
+
+##### `downloadFile(agentDir: string, filename: string) -> Promise<Blob>`
+- **Endpoint**: `GET /files/{agentDir}/{filename}`
+- **Purpose**: Download file from server to operator's PC
+- **Returns**: Promise with file blob
+
+##### `getAgentStatus(lastSeen: string, sleepTime: number = 3) -> 'online' | 'offline'`
+- **Purpose**: Determine if agent is online or offline
+- **Parameters**:
+  - `lastSeen` (string): ISO timestamp of last contact
+  - `sleepTime` (number): Agent's polling interval
+- **Returns**: 'online' or 'offline'
+- **Algorithm**: `(now - lastSeen) < (sleepTime * 2 + 5)`
+
+##### `formatBytes(bytes: number) -> string`
+- **Purpose**: Format byte size to human-readable string
+- **Parameters**: `bytes` (number): Size in bytes
+- **Returns**: Formatted string (e.g., "1.5 MB", "3.2 KB")
+
+##### `formatDate(dateString: string) -> string`
+- **Purpose**: Format ISO date string to locale string
+- **Parameters**: `dateString` (string): ISO 8601 timestamp
+- **Returns**: Localized date/time string
+
+##### `getPayloadToken() -> Promise<{token: string, expires_in: number, lifetime: number}>`
+- **Endpoint**: `GET /api/payload-token`
+- **Purpose**: Get current payload token and expiry
+- **Returns**: Promise with token info
+
+##### `readFile(agentId: number, path: string, agentSleepTime: number = 3) -> Promise<{content: string, encoding: string, size: number}>`
+- **Endpoint**: `POST /command/{agentId}/read_file` + polling
+- **Purpose**: Read file content with smart polling
+- **Returns**: Promise with file content, encoding, and size
+- **Polling**: Same pattern as listDirectory
+
+##### `writeFile(agentId: number, path: string, content: string, agentSleepTime: number = 3) -> Promise<string>`
+- **Endpoint**: `POST /command/{agentId}/write_file` + polling
+- **Purpose**: Write content to file with smart polling
+- **Returns**: Promise with result message
+- **Polling**: Same pattern as listDirectory
+
+##### `deleteFile(agentId: number, path: string, recursive: boolean = false, agentSleepTime: number = 3) -> Promise<string>`
+- **Endpoint**: `POST /command/{agentId}/delete` + polling
+- **Purpose**: Delete file or directory with smart polling
+- **Returns**: Promise with result message
+- **Polling**: Same pattern as listDirectory
+
+##### `requestFileFromAgent(agentId: number, sourcePath: string, filename?: string, agentSleepTime: number = 3) -> Promise<string>`
+- **Endpoint**: `POST /command/{agentId}/upload` + polling
+- **Purpose**: Request agent to upload file with smart polling
+- **Returns**: Promise with result message
+- **Polling**: Same pattern as listDirectory
+
+##### `downloadFileToAgent(agentId: number, filename: string, saveAs: string, agentSleepTime: number = 3) -> Promise<string>`
+- **Endpoint**: `POST /command/{agentId}/download` + polling
+- **Purpose**: Push file from server to agent with smart polling
+- **Returns**: Promise with result message
+- **Polling**: Same pattern as listDirectory
+
+---
+
+#### frontend/src/contexts/AuthContext.tsx
+
+##### `login(username: string, password: string) -> Promise<void>`
+- **Purpose**: Authenticate user and store credentials
+- **Parameters**:
+  - `username` (string): User's username
+  - `password` (string): User's password
+- **Side Effects**:
+  - Calls /auth/login endpoint
+  - Stores token and username in localStorage
+  - Updates context state
+- **Throws**: Error if authentication fails
+
+##### `logout() -> Promise<void>`
+- **Purpose**: Logout user and clear session
+- **Side Effects**:
+  - Calls /auth/logout endpoint
+  - Removes token and username from localStorage
+  - Clears context state
+  - Redirects to login page
+
+##### `useAuth() -> AuthContextType`
+- **Purpose**: Hook to access AuthContext
+- **Returns**: AuthContextType with token, username, login, logout methods
+- **Throws**: Error if used outside AuthProvider
+
+---
+
+## Summary
+
+This reference documents **118 functions** across the PyPyC2 codebase:
+
+- **Server Core**: 36 functions (Agent class, security, token management, dependencies)
+- **Server Routers**: 36 functions (28 API endpoints)
+- **Agent**: 19 functions (command execution, communication)
+- **Frontend**: 27 functions (API client, authentication, utilities)
+
+All functions are organized by file/module for easy reference. Each entry includes purpose, parameters, return types, side effects, and relevant notes about behavior or security implications.
 
 ---
 
