@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # Backend FastAPI Server
+  backend:
+    build:
+      context: ./Server
+      dockerfile: Dockerfile
+    container_name: pypyc2-backend
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8000:8000"
+    volumes:
+      # Persistent storage for uploaded files
+      - uploads_data:/app/uploads
+    environment:
+      # Python environment
+      - PYTHONUNBUFFERED=1
+      # Optional: Override default settings
+      - MAX_FILE_SIZE=104857600  # 100MB in bytes
+    networks:
+      - pypyc2-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/auth/verify').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.pypyc2.service=backend"
+      - "com.pypyc2.version=1.0.0"
+
+  # Frontend Next.js Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://backend:8000
+    container_name: pypyc2-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Runtime environment variable (browser-side)
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # Server-side can use internal network
+      - INTERNAL_API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - pypyc2-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "com.pypyc2.service=frontend"
+      - "com.pypyc2.version=1.0.0"
+
+networks:
+  pypyc2-network:
+    driver: bridge
+    name: pypyc2-network
+    labels:
+      - "com.pypyc2.network=main"
+
+volumes:
+  uploads_data:
+    driver: local
+    name: pypyc2-uploads
+    labels:
+      - "com.pypyc2.volume=uploads"
