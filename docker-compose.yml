@@ -33,17 +33,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=http://backend:8000
     container_name: pypyc2-frontend
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      # Runtime environment variable (browser-side)
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      # Server-side can use internal network
-      - INTERNAL_API_URL=http://backend:8000
+      # Note: NEXT_PUBLIC_* vars must be set at build time, not runtime
+      # Using default from code: http://localhost:8000
+      - NODE_ENV=production
     depends_on:
       backend:
         condition: service_healthy

@@ -24,12 +24,11 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy application source
 COPY . .
 
-# Set build-time environment variable
-# This will be overridden at runtime via docker-compose
-ENV NEXT_PUBLIC_API_URL=http://backend:8000
-
 # Disable telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Note: NEXT_PUBLIC_API_URL will use default from code (http://localhost:8000)
+# This is correct for accessing backend from browser on Windows host
 
 # Build Next.js application with turbopack
 RUN npm run build
