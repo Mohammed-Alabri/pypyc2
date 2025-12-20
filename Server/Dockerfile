@@ -37,6 +37,9 @@ RUN useradd -m -u 1000 -s /bin/bash pypyc2 && \
 # Copy application code
 COPY --chown=pypyc2:pypyc2 . .
 
+# Copy agent file from parent directory into Server/files/
+COPY --chown=pypyc2:pypyc2 ../Agent/allinone.py ./files/allinone.py
+
 # Switch to non-root user
 USER pypyc2
 
