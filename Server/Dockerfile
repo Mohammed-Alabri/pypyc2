@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better layer caching
-COPY requirements.txt .
+COPY Server/requirements.txt .
 
 # Create virtual environment and install dependencies
 RUN python -m venv /opt/venv
@@ -34,11 +34,11 @@ RUN useradd -m -u 1000 -s /bin/bash pypyc2 && \
     mkdir -p /app/uploads && \
     chown -R pypyc2:pypyc2 /app
 
-# Copy application code
-COPY --chown=pypyc2:pypyc2 . .
+# Copy application code from Server directory
+COPY --chown=pypyc2:pypyc2 Server/ .
 
-# Copy agent file from parent directory into Server/files/
-COPY --chown=pypyc2:pypyc2 ../Agent/allinone.py ./files/allinone.py
+# Copy agent file into files directory
+COPY --chown=pypyc2:pypyc2 Agent/allinone.py ./files/allinone.py
 
 # Switch to non-root user
 USER pypyc2

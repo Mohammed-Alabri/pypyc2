@@ -2,8 +2,8 @@ services:
   # Backend FastAPI Server
   backend:
     build:
-      context: ./Server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Server/Dockerfile
     container_name: pypyc2-backend
     restart: unless-stopped
     ports:

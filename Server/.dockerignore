@@ -1,35 +1,37 @@
+# Note: Build context is now project root, not Server/
+
 # Python cache
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/*.so
 
 # Virtual environments
-venv/
-env/
-ENV/
-.venv
+**/venv/
+**/env/
+**/ENV/
+**/.venv
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
+**/*.swp
+**/*.swo
 
 # Uploads (will use volume)
-uploads/*
-!uploads/.gitkeep
+Server/uploads/*
+!Server/uploads/.gitkeep
 
 # Testing
-*.pyc
-.pytest_cache/
-.coverage
-htmlcov/
+**/*.pyc
+**/.pytest_cache/
+**/.coverage
+**/htmlcov/
 
 # OS files
 .DS_Store
 Thumbs.db
-*.tmp
+**/*.tmp
 
 # Git
 .git/
@@ -38,8 +40,18 @@ Thumbs.db
 # Documentation (not needed in container)
 *.md
 docs/
+Documentation/
 
 # Docker files
-Dockerfile
-.dockerignore
+**/Dockerfile
+**/.dockerignore
 docker-compose.yml
+
+# Frontend (not needed in backend)
+frontend/
+node_modules/
+
+# Only need allinone.py from Agent
+Agent/main.py
+Agent/functions.py
+Agent/requirements.txt
