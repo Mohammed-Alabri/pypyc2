@@ -132,4 +132,4 @@ This is designed for:
 
 ## Disclaimer
 
-This is malware. Use it legally and responsibly. You are responsible for your actions.
+Use it legally and responsibly. You are responsible for your actions.
