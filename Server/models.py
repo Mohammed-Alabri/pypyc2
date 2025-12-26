@@ -27,6 +27,8 @@ class AgentIntial(BaseModel):
     user: str
 
 
-class WriteFileRequest(BaseModel):
+class EditFileWriteRequest(BaseModel):
     path: str
     content: str
+    encoding: str = 'utf-8'
+    timeout: int = 30

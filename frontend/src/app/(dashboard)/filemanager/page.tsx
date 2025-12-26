@@ -80,6 +80,10 @@ export default function FileManagerPage() {
   const [modified, setModified] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Create file mode state
+  const [isCreatingFile, setIsCreatingFile] = useState(false);
+  const [newFileName, setNewFileName] = useState('Untitled.txt');
+
   // Delete modal state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
@@ -225,29 +229,96 @@ export default function FileManagerPage() {
 
     const toastId = toast.loading('Loading file...');
     try {
-      const result = await readFile(selectedAgent.id, file.path, selectedAgent.sleep_time);
+      const result = await readFile(selectedAgent.id, file.path);
+
+      // Check if file is binary
+      if (result.is_binary) {
+        toast.error('Cannot edit binary file', { id: toastId });
+        return;
+      }
+
       setEditingFile(file.path);
       setFileContent(result.content);
       setOriginalContent(result.content);
       setModified(false);
       setEditorOpen(true);
-      toast.success('File loaded', { id: toastId });
+      toast.success(`File loaded (${result.encoding})`, { id: toastId });
     } catch (error: unknown) {
       toast.error((error as Error).message || 'Failed to load file', { id: toastId });
     }
   }
 
+  function handleNewFile() {
+    if (!selectedAgent) return;
+
+    // Enter create mode
+    setIsCreatingFile(true);
+    setNewFileName('Untitled.txt');
+    setFileContent('');
+    setOriginalContent('');
+    setModified(false);
+    setEditorOpen(true);
+  }
+
   async function handleSave() {
-    if (!selectedAgent || !editingFile) return;
+    if (!selectedAgent) return;
 
     setSaving(true);
     const toastId = toast.loading('Saving file...');
+
     try {
-      await writeFile(selectedAgent.id, editingFile, fileContent, selectedAgent.sleep_time);
+      let filePath: string;
+
+      if (isCreatingFile) {
+        // Validate filename
+        const trimmedName = newFileName.trim();
+        if (!trimmedName) {
+          toast.error('Filename cannot be empty', { id: toastId });
+          setSaving(false);
+          return;
+        }
+
+        // Check for invalid characters (Windows-compatible)
+        const invalidChars = /[<>:"|?*]/;
+        if (invalidChars.test(trimmedName)) {
+          toast.error('Filename contains invalid characters: < > : " | ? *', { id: toastId });
+          setSaving(false);
+          return;
+        }
+
+        // Build full path: currentPath + "/" + filename
+        filePath = currentPath === '/'
+          ? `/${trimmedName}`
+          : `${currentPath}/${trimmedName}`;
+
+        // Check if file already exists in directory
+        const existingFile = files.find(f => f.name === trimmedName && !f.is_directory);
+        if (existingFile) {
+          toast.error(`File "${trimmedName}" already exists`, { id: toastId });
+          setSaving(false);
+          return;
+        }
+      } else {
+        // Editing existing file
+        if (!editingFile) return;
+        filePath = editingFile;
+      }
+
+      // Call writeFile API (works for both create and edit)
+      await writeFile(selectedAgent.id, filePath, fileContent);
+
       setOriginalContent(fileContent);
       setModified(false);
-      toast.success('File saved successfully', { id: toastId });
-      loadDirectory(currentPath); // Refresh directory
+      toast.success(isCreatingFile ? 'File created successfully' : 'File saved successfully', { id: toastId });
+
+      // For new files: close editor and refresh directory
+      if (isCreatingFile) {
+        setEditorOpen(false);
+        setIsCreatingFile(false);
+      }
+
+      loadDirectory(currentPath); // Refresh to show new/updated file
+
     } catch (error: unknown) {
       toast.error((error as Error).message || 'Failed to save file', { id: toastId });
     } finally {
@@ -272,6 +343,10 @@ export default function FileManagerPage() {
     setFileContent('');
     setOriginalContent('');
     setModified(false);
+
+    // Reset create mode
+    setIsCreatingFile(false);
+    setNewFileName('Untitled.txt');
   }
 
   async function handleDelete(file: FileItem) {
@@ -487,6 +562,13 @@ export default function FileManagerPage() {
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
+        </button>
+        <button
+          onClick={handleNewFile}
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          New File
         </button>
         <button
           onClick={handleUpload}
@@ -727,13 +809,24 @@ export default function FileManagerPage() {
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
               <div className="flex items-center gap-3">
                 <FileText className="w-5 h-5" />
-                <span className="font-medium">{editingFile}</span>
+                {isCreatingFile ? (
+                  <input
+                    type="text"
+                    value={newFileName}
+                    onChange={(e) => setNewFileName(e.target.value)}
+                    className="text-sm bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white focus:outline-none focus:border-blue-500 min-w-[200px]"
+                    placeholder="Enter filename..."
+                    autoFocus
+                  />
+                ) : (
+                  <span className="font-medium">{editingFile}</span>
+                )}
                 {modified && <span className="text-yellow-400 text-sm">● Modified</span>}
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleSave}
-                  disabled={!modified || saving}
+                  disabled={(!isCreatingFile && !modified) || saving}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving...' : '💾 Save'}

