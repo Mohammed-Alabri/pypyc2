@@ -61,7 +61,7 @@ function TerminalContent() {
       // If this is a new agent, initialize history
       if (selectedAgent.id !== initializedAgentId) {
         const completedCommands = selectedAgent.commands.filter(
-          (cmd) => cmd.type !== 'list_directory' &&
+          (cmd) => cmd.type === 'exec' &&
                    (cmd.status === 'completed' || cmd.status === 'failed')
         );
         setCommandHistory(completedCommands as CommandResult[]);
@@ -69,7 +69,7 @@ function TerminalContent() {
       } else {
         // Same agent - merge new commands from server with local history
         const serverCommands = selectedAgent.commands.filter(
-          (cmd) => cmd.type !== 'list_directory' &&
+          (cmd) => cmd.type === 'exec' &&
                    (cmd.status === 'completed' || cmd.status === 'failed')
         );
 
